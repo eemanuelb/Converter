@@ -6,6 +6,17 @@ import re
 
 selected_files = []
 output_format = "mp4"  # padrão
+recode_var = None
+
+formatos_suportados = [
+    '.vob', '.mov', '.avi', '.mkv', '.wmv', '.mpeg', '.webm',
+    '.mp4', '.flv', '.m4v', '.3gp', '.asf'
+]
+
+formatos_saida = [
+    'mp4', 'avi', 'mov', 'mkv', 'wmv', 'mpeg', 'webm',
+    'flv', 'm4v', '3gp', 'asf', 'vob'
+]
 
 def extrair_tempo(s):
     """Extrai tempo em segundos de uma string de tempo (HH:MM:SS.ms)"""
@@ -14,6 +25,28 @@ def extrair_tempo(s):
         h, m, s = map(int, match.groups())
         return h * 3600 + m * 60 + s
     return 0
+
+
+def get_ffmpeg_codec_args(output_ext, recode):
+    output_ext = output_ext.lower().lstrip('.')
+    if not recode:
+        return ["-c", "copy"]
+
+    if output_ext in ["mp4", "mov", "mkv", "flv", "m4v", "asf"]:
+        return ["-c:v", "libx264", "-c:a", "aac"]
+    if output_ext == "avi":
+        return ["-c:v", "libx264", "-c:a", "libmp3lame"]
+    if output_ext == "wmv":
+        return ["-c:v", "wmv2", "-c:a", "wmav2"]
+    if output_ext == "mpeg":
+        return ["-c:v", "mpeg2video", "-c:a", "mp2"]
+    if output_ext == "webm":
+        return ["-c:v", "libvpx-vp9", "-c:a", "libopus"]
+    if output_ext == "3gp":
+        return ["-c:v", "libx264", "-c:a", "aac"]
+
+    return ["-c:v", "libx264", "-c:a", "aac"]
+
 
 def converter_videos(arquivos):
     global output_format
@@ -30,16 +63,14 @@ def converter_videos(arquivos):
         vob = Path(caminho)
         saida = vob.with_suffix(f".{output_format}")
         
-        label_status.config(text=f"Convertendo ({idx+1}/{total_arquivos}): {vob.name}")
+        modo = "recodificando" if recode_var.get() else "copiando"
+        label_status.config(text=f"Convertendo ({idx+1}/{total_arquivos}): {vob.name} ({modo})")
         root.update()
-        
-        comando = [
-            "ffmpeg",
-            "-y",
-            "-i", str(vob),
-            "-c", "copy",
-            str(saida)
-        ]
+
+        comando = ["ffmpeg", "-y", "-i", str(vob)]
+        codec_args = get_ffmpeg_codec_args(output_format, recode_var.get())
+        comando.extend(codec_args)
+        comando.append(str(saida))
 
         proc = subprocess.Popen(
             comando,
@@ -69,6 +100,13 @@ def converter_videos(arquivos):
                 root.update()
         
         proc.wait()
+        if proc.returncode != 0:
+            label_status.config(text=f"Erro ao converter: {vob.name}")
+            messagebox.showerror("Erro", f"Falha ao converter {vob.name}. Verifique o formato e tente novamente.")
+            btn_converter.config(state=tk.NORMAL)
+            btn_selecionar.config(state=tk.NORMAL)
+            return
+
         progress_bar.config(value=100)
         label_progresso.config(text="100%")
         root.update()
@@ -103,8 +141,6 @@ def selecionar_arquivos():
         ]
     )
     if arquivos:
-        # Verificar se os arquivos são suportados (simples verificação por extensão)
-        formatos_suportados = ['.vob', '.mov', '.avi', '.mkv', '.wmv', '.mpeg', '.webm', '.mp4', '.flv', '.m4v', '.3gp', '.asf']
         arquivos_validos = []
         for arq in arquivos:
             if Path(arq).suffix.lower() in formatos_suportados:
@@ -149,11 +185,15 @@ def main():
 
     tk.Label(root, text="Formato de saída:", font=("Arial", 9)).pack(pady=5)
 
-    formatos = ["mp4", "avi", "mov", "mkv", "wmv", "mpeg", "webm"]
-    combo_formato = ttk.Combobox(root, values=formatos, state="readonly", width=10)
+    combo_formato = ttk.Combobox(root, values=formatos_saida, state="readonly", width=10)
     combo_formato.set("mp4")
     combo_formato.pack(pady=5)
     combo_formato.bind("<<ComboboxSelected>>", lambda e: atualizar_formato(combo_formato.get()))
+
+    global recode_var
+    recode_var = tk.BooleanVar(value=False)
+    recode_check = tk.Checkbutton(root, text="Modo recodificação", variable=recode_var)
+    recode_check.pack(pady=3)
 
     tk.Label(root, text="Arquivos selecionados:", font=("Arial", 9)).pack(anchor="w", padx=10)
 
