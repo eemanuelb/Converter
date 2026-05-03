@@ -7,6 +7,8 @@ import re
 selected_files = []
 output_format = "mp4"  # padrão
 recode_var = None
+codec_video = "libx264"
+codec_audio = "aac"
 
 formatos_suportados = [
     '.vob', '.mov', '.avi', '.mkv', '.wmv', '.mpeg', '.webm',
@@ -28,24 +30,12 @@ def extrair_tempo(s):
 
 
 def get_ffmpeg_codec_args(output_ext, recode):
+    global codec_video, codec_audio
     output_ext = output_ext.lower().lstrip('.')
     if not recode:
         return ["-c", "copy"]
-
-    if output_ext in ["mp4", "mov", "mkv", "flv", "m4v", "asf"]:
-        return ["-c:v", "libx264", "-c:a", "aac"]
-    if output_ext == "avi":
-        return ["-c:v", "libx264", "-c:a", "libmp3lame"]
-    if output_ext == "wmv":
-        return ["-c:v", "wmv2", "-c:a", "wmav2"]
-    if output_ext == "mpeg":
-        return ["-c:v", "mpeg2video", "-c:a", "mp2"]
-    if output_ext == "webm":
-        return ["-c:v", "libvpx-vp9", "-c:a", "libopus"]
-    if output_ext == "3gp":
-        return ["-c:v", "libx264", "-c:a", "aac"]
-
-    return ["-c:v", "libx264", "-c:a", "aac"]
+    
+    return ["-c:v", codec_video, "-c:a", codec_audio]
 
 
 def converter_videos(arquivos):
@@ -110,6 +100,14 @@ def converter_videos(arquivos):
         progress_bar.config(value=100)
         label_progresso.config(text="100%")
         root.update()
+        
+        # Remover arquivo da lista após conversão bem-sucedida
+        try:
+            idx_remover = selected_files.index(caminho)
+            selected_files.pop(idx_remover)
+            listbox_arquivos.delete(idx_remover)
+        except (ValueError, tk.TclError):
+            pass
     
     messagebox.showinfo("Pronto", "Conversão concluída!")
     btn_converter.config(state=tk.NORMAL)
@@ -158,6 +156,14 @@ def atualizar_formato(formato):
     global output_format
     output_format = formato
 
+def atualizar_codec_video(codec):
+    global codec_video
+    codec_video = codec
+
+def atualizar_codec_audio(codec):
+    global codec_audio
+    codec_audio = codec
+
 def iniciar_conversao():
     if selected_files:
         converter_videos(selected_files)
@@ -170,7 +176,7 @@ def main():
     
     root = tk.Tk()
     root.title("Conversor de Vídeo")
-    root.geometry("500x450")
+    root.geometry("550x600")
 
     tk.Label(root, text="Selecione os arquivos de vídeo para converter:", font=("Arial", 10, "bold")).pack(pady=10)
 
@@ -194,6 +200,24 @@ def main():
     recode_var = tk.BooleanVar(value=False)
     recode_check = tk.Checkbutton(root, text="Modo recodificação", variable=recode_var)
     recode_check.pack(pady=3)
+
+    # Menu Avançado
+    frame_advanced = tk.LabelFrame(root, text="Avançado (recodificação)", font=("Arial", 9), padx=10, pady=5)
+    frame_advanced.pack(padx=10, pady=5, fill=tk.X)
+
+    tk.Label(frame_advanced, text="Vídeo:", font=("Arial", 8)).pack(anchor="w")
+    codecs_video = ["libx264", "libx265", "libvpx", "libvpx-vp9", "mpeg2video", "wmv2"]
+    combo_video = ttk.Combobox(frame_advanced, values=codecs_video, state="readonly", width=20)
+    combo_video.set("libx264")
+    combo_video.pack(padx=5, pady=2, fill=tk.X)
+    combo_video.bind("<<ComboboxSelected>>", lambda e: atualizar_codec_video(combo_video.get()))
+
+    tk.Label(frame_advanced, text="Áudio:", font=("Arial", 8)).pack(anchor="w")
+    codecs_audio = ["aac", "libmp3lame", "libopus", "wmav2", "mp2", "pcm_s16le"]
+    combo_audio = ttk.Combobox(frame_advanced, values=codecs_audio, state="readonly", width=20)
+    combo_audio.set("aac")
+    combo_audio.pack(padx=5, pady=2, fill=tk.X)
+    combo_audio.bind("<<ComboboxSelected>>", lambda e: atualizar_codec_audio(combo_audio.get()))
 
     tk.Label(root, text="Arquivos selecionados:", font=("Arial", 9)).pack(anchor="w", padx=10)
 
