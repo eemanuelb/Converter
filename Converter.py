@@ -3,12 +3,17 @@ from pathlib import Path
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 import re
+import json
+import os
 
 selected_files = []
 output_format = "mp4"  # padrão
 codec_mode = "copy"  # "copy", "padrao", "avancado"
 codec_video = "libx264"
 codec_audio = "aac"
+dark_mode = False
+keep_on_top = False
+settings_path = Path(os.getenv("APPDATA", Path.home())) / "Conversor" / "settings.json"
 
 video_codec_options = {
     "H.264": "libx264",
@@ -57,6 +62,61 @@ formatos_saida = [
     'flv', 'm4v', '3gp', 'asf', 'vob', 'ogv', 'm2ts',
     'ts', 'f4v', 'mxf', 'gif'
 ]
+
+def encontrar_rotulo_codec(opcoes, encoder, padrao):
+    for rotulo, valor in opcoes.items():
+        if valor == encoder:
+            return rotulo
+    return padrao
+
+
+def carregar_configuracoes():
+    global output_format, codec_mode, codec_video, codec_audio, dark_mode, keep_on_top
+    if not settings_path.exists():
+        return
+
+    try:
+        dados = json.loads(settings_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return
+
+    formato = dados.get("output_format")
+    if formato in formatos_saida:
+        output_format = formato
+
+    modo = dados.get("codec_mode")
+    if modo in {"copy", "padrao", "avancado"}:
+        codec_mode = modo
+
+    video = dados.get("codec_video")
+    if video in video_codec_options.values():
+        codec_video = video
+
+    audio = dados.get("codec_audio")
+    if audio in audio_codec_options.values():
+        codec_audio = audio
+
+    dark_mode = bool(dados.get("dark_mode", dark_mode))
+    keep_on_top = bool(dados.get("keep_on_top", keep_on_top))
+
+
+def salvar_configuracoes():
+    dados = {
+        "output_format": output_format,
+        "codec_mode": codec_mode,
+        "codec_video": codec_video,
+        "codec_audio": codec_audio,
+        "dark_mode": dark_mode,
+        "keep_on_top": keep_on_top,
+    }
+    try:
+        settings_path.parent.mkdir(parents=True, exist_ok=True)
+        settings_path.write_text(json.dumps(dados, indent=2), encoding="utf-8")
+    except OSError:
+        pass
+
+
+carregar_configuracoes()
 
 def extrair_tempo(s):
     """Extrai tempo em segundos de uma string de tempo (HH:MM:SS.ms)"""
@@ -203,19 +263,24 @@ def selecionar_arquivos():
 def atualizar_formato(formato):
     global output_format
     output_format = formato
+    salvar_configuracoes()
 
 def atualizar_codec_video(codec):
     global codec_video
     codec_video = video_codec_options[codec]
+    salvar_configuracoes()
 
 def atualizar_codec_audio(codec):
     global codec_audio
     codec_audio = audio_codec_options[codec]
+    salvar_configuracoes()
 
 def atualizar_codec_mode(mode):
-    global codec_mode_var
+    global codec_mode, codec_mode_var
+    codec_mode = mode
     codec_mode_var.set(mode)
     toggle_advanced()
+    salvar_configuracoes()
 
 def toggle_advanced():
     if codec_mode_var.get() == "avancado":
@@ -230,6 +295,49 @@ def iniciar_conversao():
         messagebox.showwarning("Aviso", "Selecione ao menos um arquivo.")
 
 
+def aplicar_tema(janela, modo_escuro):
+    cores = {
+        "bg": "#1f1f1f" if modo_escuro else "#f0f0f0",
+        "fg": "#f2f2f2" if modo_escuro else "#000000",
+        "field": "#2b2b2b" if modo_escuro else "#ffffff",
+        "button": "#333333" if modo_escuro else "#f0f0f0",
+        "select": "#3a3a3a" if modo_escuro else "#d9e8fb",
+    }
+
+    style = ttk.Style(janela)
+    style.theme_use("clam")
+    style.configure("TNotebook", background=cores["bg"], borderwidth=0)
+    style.configure("TNotebook.Tab", background=cores["button"], foreground=cores["fg"], padding=(10, 5))
+    style.map("TNotebook.Tab", background=[("selected", cores["field"])])
+    style.configure("TCombobox", fieldbackground=cores["field"], background=cores["button"], foreground=cores["fg"])
+    style.configure("Horizontal.TProgressbar", background="#4CAF50", troughcolor=cores["field"])
+
+    def aplicar_widget(widget):
+        classe = widget.winfo_class()
+        if classe in {"Frame", "Labelframe", "TFrame"}:
+            widget.configure(bg=cores["bg"])
+        elif classe == "Label":
+            widget.configure(bg=cores["bg"], fg=cores["fg"])
+        elif classe in {"Radiobutton", "Checkbutton"}:
+            widget.configure(
+                bg=cores["bg"],
+                fg=cores["fg"],
+                activebackground=cores["bg"],
+                activeforeground=cores["fg"],
+                selectcolor=cores["field"],
+            )
+        elif classe == "Button" and widget.cget("text") != "Converter":
+            widget.configure(bg=cores["button"], fg=cores["fg"], activebackground=cores["field"], activeforeground=cores["fg"])
+        elif classe == "Listbox":
+            widget.configure(bg=cores["field"], fg=cores["fg"], selectbackground=cores["select"], selectforeground=cores["fg"])
+
+        for filho in widget.winfo_children():
+            aplicar_widget(filho)
+
+    janela.configure(bg=cores["bg"])
+    aplicar_widget(janela)
+
+
 def main():
     global btn_converter, btn_selecionar, listbox_arquivos, progress_bar, label_progresso, label_status, label_arquivos, root
     
@@ -237,9 +345,17 @@ def main():
     root.title("Conversor de Vídeo")
     root.geometry("550x600")
 
-    tk.Label(root, text="Selecione os arquivos de vídeo para converter:", font=("Arial", 10, "bold")).pack(pady=10)
+    notebook = ttk.Notebook(root)
+    notebook.pack(fill=tk.BOTH, expand=True)
 
-    frame_botoes = tk.Frame(root)
+    aba_video = tk.Frame(notebook)
+    aba_configuracoes = tk.Frame(notebook)
+    notebook.add(aba_video, text="Vídeo")
+    notebook.add(aba_configuracoes, text="Configurações")
+
+    tk.Label(aba_video, text="Selecione os arquivos de vídeo para converter:", font=("Arial", 10, "bold")).pack(pady=10)
+
+    frame_botoes = tk.Frame(aba_video)
     frame_botoes.pack(pady=5)
 
     btn_selecionar = tk.Button(frame_botoes, text="Selecionar Arquivos", command=selecionar_arquivos, width=20)
@@ -248,15 +364,15 @@ def main():
     btn_remover = tk.Button(frame_botoes, text="Remover Selecionado", command=lambda: remover_arquivo())
     btn_remover.pack(side=tk.LEFT, padx=5)
 
-    tk.Label(root, text="Formato de saída:", font=("Arial", 9)).pack(pady=5)
+    tk.Label(aba_video, text="Formato de saída:", font=("Arial", 9)).pack(pady=5)
 
-    combo_formato = ttk.Combobox(root, values=formatos_saida, state="readonly", width=10)
-    combo_formato.set("mp4")
+    combo_formato = ttk.Combobox(aba_video, values=formatos_saida, state="readonly", width=10)
+    combo_formato.set(output_format)
     combo_formato.pack(pady=5)
     combo_formato.bind("<<ComboboxSelected>>", lambda e: atualizar_formato(combo_formato.get()))
 
     # Modo de codecs
-    frame_codecs = tk.Frame(root)
+    frame_codecs = tk.Frame(aba_video)
     frame_codecs.pack(pady=5)
 
     global codec_mode_var
@@ -268,30 +384,30 @@ def main():
 
     # Menu Avançado (inicialmente oculto)
     global frame_advanced
-    frame_advanced = tk.LabelFrame(root, text="Codec Avançado", font=("Arial", 9), padx=10, pady=5)
+    frame_advanced = tk.LabelFrame(aba_video, text="Codec Avançado", font=("Arial", 9), padx=10, pady=5)
     # Não pack inicialmente
 
     tk.Label(frame_advanced, text="Vídeo:", font=("Arial", 8)).pack(anchor="w")
     codecs_video = list(video_codec_options.keys())
     combo_video = ttk.Combobox(frame_advanced, values=codecs_video, state="readonly", width=20)
-    combo_video.set("H.264")
+    combo_video.set(encontrar_rotulo_codec(video_codec_options, codec_video, "H.264"))
     combo_video.pack(padx=5, pady=2, fill=tk.X)
     combo_video.bind("<<ComboboxSelected>>", lambda e: atualizar_codec_video(combo_video.get()))
 
     tk.Label(frame_advanced, text="Áudio:", font=("Arial", 8)).pack(anchor="w")
     codecs_audio = list(audio_codec_options.keys())
     combo_audio = ttk.Combobox(frame_advanced, values=codecs_audio, state="readonly", width=20)
-    combo_audio.set("AAC")
+    combo_audio.set(encontrar_rotulo_codec(audio_codec_options, codec_audio, "AAC"))
     combo_audio.pack(padx=5, pady=2, fill=tk.X)
     combo_audio.bind("<<ComboboxSelected>>", lambda e: atualizar_codec_audio(combo_audio.get()))
 
-    label_arquivos = tk.Label(root, text="Arquivos selecionados:", font=("Arial", 9))
+    label_arquivos = tk.Label(aba_video, text="Arquivos selecionados:", font=("Arial", 9))
     label_arquivos.pack(anchor="w", padx=10)
 
     # Garantir estado inicial
     toggle_advanced()
 
-    frame_listbox = tk.Frame(root)
+    frame_listbox = tk.Frame(aba_video)
     frame_listbox.pack(padx=10, pady=5, fill=tk.BOTH, expand=True)
 
     scrollbar = tk.Scrollbar(frame_listbox)
@@ -301,17 +417,52 @@ def main():
     listbox_arquivos.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
     scrollbar.config(command=listbox_arquivos.yview)
 
-    label_status = tk.Label(root, text="Pronto para converter", font=("Arial", 9))
+    label_status = tk.Label(aba_video, text="Pronto para converter", font=("Arial", 9))
     label_status.pack(pady=5)
 
-    progress_bar = ttk.Progressbar(root, orient=tk.HORIZONTAL, length=400, mode='determinate')
+    progress_bar = ttk.Progressbar(aba_video, orient=tk.HORIZONTAL, length=400, mode='determinate')
     progress_bar.pack(pady=5, padx=10, fill=tk.X)
 
-    label_progresso = tk.Label(root, text="0%", font=("Arial", 9))
+    label_progresso = tk.Label(aba_video, text="0%", font=("Arial", 9))
     label_progresso.pack(pady=2)
 
-    btn_converter = tk.Button(root, text="Converter", width=20, command=iniciar_conversao, bg="#4CAF50", fg="white")
+    btn_converter = tk.Button(aba_video, text="Converter", width=20, command=iniciar_conversao, bg="#4CAF50", fg="white")
     btn_converter.pack(pady=15)
+
+    frame_config_geral = tk.LabelFrame(aba_configuracoes, text="Geral", font=("Arial", 9), padx=10, pady=10)
+    frame_config_geral.pack(padx=12, pady=12, fill=tk.X)
+
+    manter_no_topo_var = tk.BooleanVar(value=keep_on_top)
+    modo_escuro_var = tk.BooleanVar(value=dark_mode)
+
+    def atualizar_manter_no_topo():
+        global keep_on_top
+        keep_on_top = manter_no_topo_var.get()
+        root.attributes("-topmost", manter_no_topo_var.get())
+        salvar_configuracoes()
+
+    def atualizar_modo_escuro():
+        global dark_mode
+        dark_mode = modo_escuro_var.get()
+        aplicar_tema(root, dark_mode)
+        salvar_configuracoes()
+
+    tk.Checkbutton(
+        frame_config_geral,
+        text="Manter janela sempre no topo",
+        variable=manter_no_topo_var,
+        command=atualizar_manter_no_topo
+    ).pack(anchor="w")
+
+    tk.Checkbutton(
+        frame_config_geral,
+        text="Modo escuro",
+        variable=modo_escuro_var,
+        command=atualizar_modo_escuro
+    ).pack(anchor="w", pady=(6, 0))
+
+    root.attributes("-topmost", keep_on_top)
+    aplicar_tema(root, dark_mode)
 
     root.mainloop()
 
