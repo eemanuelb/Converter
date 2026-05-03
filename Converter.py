@@ -13,11 +13,16 @@ codec_audio = "aac"
 video_codec_options = {
     "H.264": "libx264",
     "H.265": "libx265",
+    "AV1": "libaom-av1",
     "MPEG-4": "mpeg4",
+    "H.261": "h261",
+    "H.263": "h263",
     "VP8": "libvpx",
     "VP9": "libvpx-vp9",
+    "VP7": "vp7",
     "Theora": "libtheora",
     "MPEG-2": "mpeg2video",
+    "MJPEG": "mjpeg",
     "ProRes": "prores_ks",
     "DNxHD": "dnxhd",
     "WMV": "wmv2",
@@ -30,6 +35,12 @@ audio_codec_options = {
     "Vorbis": "libvorbis",
     "FLAC": "flac",
     "ALAC": "alac",
+    "AC3": "ac3",
+    "E-AC3": "eac3",
+    "DTS": "dts",
+    "AMR-NB": "libopencore_amrnb",
+    "AMR-WB": "libvo_amrwbenc",
+    "WavPack": "wavpack",
     "WMA": "wmav2",
     "MP2": "mp2",
     "PCM": "pcm_s16le",
@@ -37,12 +48,14 @@ audio_codec_options = {
 
 formatos_suportados = [
     '.vob', '.mov', '.avi', '.mkv', '.wmv', '.mpeg', '.webm',
-    '.mp4', '.flv', '.m4v', '.3gp', '.asf'
+    '.mp4', '.flv', '.m4v', '.3gp', '.asf', '.ogv', '.m2ts',
+    '.ts', '.f4v', '.mxf', '.gif'
 ]
 
 formatos_saida = [
     'mp4', 'avi', 'mov', 'mkv', 'wmv', 'mpeg', 'webm',
-    'flv', 'm4v', '3gp', 'asf', 'vob'
+    'flv', 'm4v', '3gp', 'asf', 'vob', 'ogv', 'm2ts',
+    'ts', 'f4v', 'mxf', 'gif'
 ]
 
 def extrair_tempo(s):
@@ -160,22 +173,16 @@ def converter_videos(arquivos):
 
 def selecionar_arquivos():
     global selected_files
+    todos_formatos = " ".join(f"*{formato}" for formato in formatos_suportados)
+    filtros_formatos = [
+        (f"Arquivos {formato.lstrip('.').upper()}", f"*{formato}")
+        for formato in formatos_suportados
+    ]
     arquivos = filedialog.askopenfilenames(
         title="Selecione arquivos de vídeo",
         filetypes=[
-            ("Todos os arquivos de vídeo", "*.vob *.mov *.avi *.mkv *.wmv *.mpeg *.webm *.mp4 *.flv *.m4v *.3gp *.asf"),
-            ("Arquivos VOB", "*.vob"),
-            ("Arquivos MOV", "*.mov"),
-            ("Arquivos AVI", "*.avi"),
-            ("Arquivos MKV", "*.mkv"),
-            ("Arquivos WMV", "*.wmv"),
-            ("Arquivos MPEG", "*.mpeg"),
-            ("Arquivos WebM", "*.webm"),
-            ("Arquivos MP4", "*.mp4"),
-            ("Arquivos FLV", "*.flv"),
-            ("Arquivos M4V", "*.m4v"),
-            ("Arquivos 3GP", "*.3gp"),
-            ("Arquivos ASF", "*.asf"),
+            ("Todos os arquivos de vídeo", todos_formatos),
+            *filtros_formatos,
             ("Todos os arquivos", "*.*")
         ]
     )
