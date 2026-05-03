@@ -10,6 +10,24 @@ codec_mode = "copy"  # "copy", "padrao", "avancado"
 codec_video = "libx264"
 codec_audio = "aac"
 
+video_codec_options = {
+    "H.264": "libx264",
+    "H.265 / HEVC": "libx265",
+    "VP8": "libvpx",
+    "VP9": "libvpx-vp9",
+    "MPEG-2": "mpeg2video",
+    "WMV": "wmv2",
+}
+
+audio_codec_options = {
+    "AAC": "aac",
+    "MP3": "libmp3lame",
+    "Opus": "libopus",
+    "WMA": "wmav2",
+    "MP2": "mp2",
+    "PCM / WAV": "pcm_s16le",
+}
+
 formatos_suportados = [
     '.vob', '.mov', '.avi', '.mkv', '.wmv', '.mpeg', '.webm',
     '.mp4', '.flv', '.m4v', '.3gp', '.asf'
@@ -174,7 +192,11 @@ def atualizar_formato(formato):
 
 def atualizar_codec_video(codec):
     global codec_video
-    codec_video = codec
+    codec_video = video_codec_options[codec]
+
+def atualizar_codec_audio(codec):
+    global codec_audio
+    codec_audio = audio_codec_options[codec]
 
 def atualizar_codec_mode(mode):
     global codec_mode_var
@@ -236,16 +258,16 @@ def main():
     # Não pack inicialmente
 
     tk.Label(frame_advanced, text="Vídeo:", font=("Arial", 8)).pack(anchor="w")
-    codecs_video = ["libx264", "libx265", "libvpx", "libvpx-vp9", "mpeg2video", "wmv2"]
+    codecs_video = list(video_codec_options.keys())
     combo_video = ttk.Combobox(frame_advanced, values=codecs_video, state="readonly", width=20)
-    combo_video.set("libx264")
+    combo_video.set("H.264")
     combo_video.pack(padx=5, pady=2, fill=tk.X)
     combo_video.bind("<<ComboboxSelected>>", lambda e: atualizar_codec_video(combo_video.get()))
 
     tk.Label(frame_advanced, text="Áudio:", font=("Arial", 8)).pack(anchor="w")
-    codecs_audio = ["aac", "libmp3lame", "libopus", "wmav2", "mp2", "pcm_s16le"]
+    codecs_audio = list(audio_codec_options.keys())
     combo_audio = ttk.Combobox(frame_advanced, values=codecs_audio, state="readonly", width=20)
-    combo_audio.set("aac")
+    combo_audio.set("AAC")
     combo_audio.pack(padx=5, pady=2, fill=tk.X)
     combo_audio.bind("<<ComboboxSelected>>", lambda e: atualizar_codec_audio(combo_audio.get()))
 
