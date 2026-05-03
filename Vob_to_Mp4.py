@@ -82,12 +82,16 @@ def converter_videos(arquivos):
 def selecionar_arquivos():
     global selected_files
     arquivos = filedialog.askopenfilenames(
-        title="Selecione arquivos de vídeo (.vob, .mov, .avi)",
+        title="Selecione arquivos de vídeo (.vob, .mov, .avi, .mkv, .wmv, .mpeg, .webm)",
         filetypes=[
-            ("Arquivos de Vídeo", "*.vob *.mov *.avi"),
+            ("Arquivos de Vídeo", "*.vob *.mov *.avi *.mkv *.wmv *.mpeg *.webm"),
             ("Arquivos VOB", "*.vob"),
             ("Arquivos MOV", "*.mov"),
-            ("Arquivos AVI", "*.avi")
+            ("Arquivos AVI", "*.avi"),
+            ("Arquivos MKV", "*.mkv"),
+            ("Arquivos WMV", "*.wmv"),
+            ("Arquivos MPEG", "*.mpeg"),
+            ("Arquivos WebM", "*.webm")
         ]
     )
     if arquivos:
@@ -108,10 +112,10 @@ def main():
     global btn_converter, btn_selecionar, listbox_arquivos, progress_bar, label_progresso, label_status, root
     
     root = tk.Tk()
-    root.title("Conversor de Vídeo (VOB/MOV/AVI para MP4)")
+    root.title("Conversor de Vídeo (VOB/MOV/AVI/MKV/WMV/MPEG/WebM para MP4)")
     root.geometry("500x450")
 
-    tk.Label(root, text="Selecione os arquivos de vídeo (.vob, .mov, .avi) para converter:", font=("Arial", 10, "bold")).pack(pady=10)
+    tk.Label(root, text="Selecione os arquivos de vídeo (.vob, .mov, .avi, .mkv, .wmv, .mpeg, .webm) para converter:", font=("Arial", 10, "bold")).pack(pady=10)
 
     frame_botoes = tk.Frame(root)
     frame_botoes.pack(pady=5)
