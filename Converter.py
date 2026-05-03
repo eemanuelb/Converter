@@ -6,6 +6,7 @@ import re
 import json
 import os
 from datetime import datetime
+import threading
 
 selected_files = []
 output_format = "mp4"  # padrão
@@ -119,16 +120,54 @@ def salvar_configuracoes():
 
 carregar_configuracoes()
 
+def executar_na_ui(func, *args, **kwargs):
+    try:
+        if threading.current_thread() is threading.main_thread():
+            func(*args, **kwargs)
+        else:
+            root.after(0, lambda: func(*args, **kwargs))
+    except NameError:
+        func(*args, **kwargs)
+
+
 def registrar_log(mensagem):
     horario = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     linha = f"[{horario}] {mensagem}\n"
-    try:
+
+    def escrever():
         log_text.config(state=tk.NORMAL)
         log_text.insert(tk.END, linha)
         log_text.see(tk.END)
         log_text.config(state=tk.DISABLED)
+
+    try:
+        executar_na_ui(escrever)
     except NameError:
         print(linha, end="")
+
+
+def atualizar_status(texto):
+    executar_na_ui(label_status.config, text=texto)
+
+
+def atualizar_progresso(valor):
+    executar_na_ui(progress_bar.config, value=valor)
+    executar_na_ui(label_progresso.config, text=f"{valor}%")
+
+
+def configurar_botoes_conversao(ativo):
+    estado = tk.NORMAL if ativo else tk.DISABLED
+    executar_na_ui(btn_converter.config, state=estado)
+    executar_na_ui(btn_selecionar.config, state=estado)
+
+
+def remover_arquivo_convertido(caminho):
+    try:
+        idx_remover = selected_files.index(caminho)
+        selected_files.pop(idx_remover)
+        listbox_arquivos.delete(idx_remover)
+    except (ValueError, tk.TclError):
+        pass
 
 
 def extrair_tempo(s):
@@ -140,13 +179,17 @@ def extrair_tempo(s):
     return 0
 
 
-def get_ffmpeg_codec_args(output_ext, recode):
-    global codec_video, codec_audio, codec_mode_var
+def get_ffmpeg_codec_args(output_ext, recode, mode=None, video_encoder=None, audio_encoder=None):
+    global codec_video, codec_audio
     output_ext = output_ext.lower().lstrip('.')
+    mode = mode or codec_mode
+    video_encoder = video_encoder or codec_video
+    audio_encoder = audio_encoder or codec_audio
+
     if not recode:
         return ["-c", "copy"]
     
-    if codec_mode_var.get() == "padrao":
+    if mode == "padrao":
         # Codecs fixos por formato
         if output_ext in ["mp4", "mov", "mkv", "flv", "m4v", "asf"]:
             return ["-c:v", "libx264", "-c:a", "aac"]
@@ -162,32 +205,40 @@ def get_ffmpeg_codec_args(output_ext, recode):
             return ["-c:v", "libx264", "-c:a", "aac"]
         return ["-c:v", "libx264", "-c:a", "aac"]
     
-    return ["-c:v", codec_video, "-c:a", codec_audio]
+    return ["-c:v", video_encoder, "-c:a", audio_encoder]
 
 
 def converter_videos(arquivos):
     global output_format
     if not arquivos:
-        messagebox.showwarning("Aviso", "Nenhum arquivo selecionado.")
+        executar_na_ui(messagebox.showwarning, "Aviso", "Nenhum arquivo selecionado.")
         registrar_log("Aviso: tentativa de conversao sem arquivos selecionados.")
         return
 
-    btn_converter.config(state=tk.DISABLED)
-    btn_selecionar.config(state=tk.DISABLED)
+    configurar_botoes_conversao(False)
     
     total_arquivos = len(arquivos)
+    formato_saida = output_format
+    modo_codec = codec_mode
+    video_encoder = codec_video
+    audio_encoder = codec_audio
     registrar_log(f"Iniciando conversao de {total_arquivos} arquivo(s).")
     
     for idx, caminho in enumerate(arquivos):
         vob = Path(caminho)
-        saida = vob.with_suffix(f".{output_format}")
+        saida = vob.with_suffix(f".{formato_saida}")
         
-        modo = "recodificando" if codec_mode_var.get() != "copy" else "copiando"
-        label_status.config(text=f"Convertendo ({idx+1}/{total_arquivos}): {vob.name} ({modo})")
-        root.update()
+        modo = "recodificando" if modo_codec != "copy" else "copiando"
+        atualizar_status(f"Convertendo ({idx+1}/{total_arquivos}): {vob.name} ({modo})")
 
         comando = ["ffmpeg", "-y", "-i", str(vob)]
-        codec_args = get_ffmpeg_codec_args(output_format, codec_mode_var.get() != "copy")
+        codec_args = get_ffmpeg_codec_args(
+            formato_saida,
+            modo_codec != "copy",
+            modo_codec,
+            video_encoder,
+            audio_encoder,
+        )
         comando.extend(codec_args)
         comando.append(str(saida))
         registrar_log(f"Convertendo arquivo: {vob.name}")
@@ -202,10 +253,9 @@ def converter_videos(arquivos):
             )
         except FileNotFoundError:
             registrar_log("Erro: ffmpeg nao foi encontrado no PATH do sistema.")
-            label_status.config(text="Erro: ffmpeg não encontrado")
-            messagebox.showerror("Erro", "FFmpeg não foi encontrado. Verifique se ele está instalado e no PATH.")
-            btn_converter.config(state=tk.NORMAL)
-            btn_selecionar.config(state=tk.NORMAL)
+            atualizar_status("Erro: ffmpeg não encontrado")
+            executar_na_ui(messagebox.showerror, "Erro", "FFmpeg não foi encontrado. Verifique se ele está instalado e no PATH.")
+            configurar_botoes_conversao(True)
             return
         
         duracao_total = 0
@@ -226,43 +276,30 @@ def converter_videos(arquivos):
                 else:
                     porcentagem = 0
                 
-                progress_bar.config(value=porcentagem)
-                label_progresso.config(text=f"{porcentagem}%")
-                root.update()
+                atualizar_progresso(porcentagem)
         
         proc.wait()
         if proc.returncode != 0:
-            label_status.config(text=f"Erro ao converter: {vob.name}")
+            atualizar_status(f"Erro ao converter: {vob.name}")
             registrar_log(f"Erro ao converter {vob.name}. Codigo de saida: {proc.returncode}")
             if linhas_erro:
                 registrar_log("Saida de erro do ffmpeg:")
                 for linha in linhas_erro[-25:]:
                     registrar_log(f"  {linha}")
-            messagebox.showerror("Erro", f"Falha ao converter {vob.name}. Verifique o formato e tente novamente.")
-            btn_converter.config(state=tk.NORMAL)
-            btn_selecionar.config(state=tk.NORMAL)
+            executar_na_ui(messagebox.showerror, "Erro", f"Falha ao converter {vob.name}. Verifique o formato e tente novamente.")
+            configurar_botoes_conversao(True)
             return
 
-        progress_bar.config(value=100)
-        label_progresso.config(text="100%")
-        root.update()
+        atualizar_progresso(100)
         registrar_log(f"Conversao concluida: {saida.name}")
         
-        # Remover arquivo da lista após conversão bem-sucedida
-        try:
-            idx_remover = selected_files.index(caminho)
-            selected_files.pop(idx_remover)
-            listbox_arquivos.delete(idx_remover)
-        except (ValueError, tk.TclError):
-            pass
+        executar_na_ui(remover_arquivo_convertido, caminho)
     
-    messagebox.showinfo("Pronto", "Conversão concluída!")
+    executar_na_ui(messagebox.showinfo, "Pronto", "Conversão concluída!")
     registrar_log("Conversao finalizada com sucesso.")
-    btn_converter.config(state=tk.NORMAL)
-    btn_selecionar.config(state=tk.NORMAL)
-    label_status.config(text="Conversão finalizada")
-    progress_bar.config(value=0)
-    label_progresso.config(text="0%")
+    configurar_botoes_conversao(True)
+    atualizar_status("Conversão finalizada")
+    atualizar_progresso(0)
 
 
 def selecionar_arquivos():
@@ -325,7 +362,9 @@ def toggle_advanced():
 
 def iniciar_conversao():
     if selected_files:
-        converter_videos(selected_files)
+        arquivos = list(selected_files)
+        configurar_botoes_conversao(False)
+        threading.Thread(target=converter_videos, args=(arquivos,), daemon=True).start()
     else:
         messagebox.showwarning("Aviso", "Selecione ao menos um arquivo.")
 
@@ -345,7 +384,18 @@ def aplicar_tema(janela, modo_escuro):
     style.configure("TNotebook.Tab", background=cores["button"], foreground=cores["fg"], padding=(10, 5))
     style.map("TNotebook.Tab", background=[("selected", cores["field"])])
     style.configure("TCombobox", fieldbackground=cores["field"], background=cores["button"], foreground=cores["fg"])
+    style.map(
+        "TCombobox",
+        fieldbackground=[("readonly", cores["field"])],
+        foreground=[("readonly", cores["fg"])],
+        selectbackground=[("readonly", cores["select"])],
+        selectforeground=[("readonly", cores["fg"])],
+    )
     style.configure("Horizontal.TProgressbar", background="#4CAF50", troughcolor=cores["field"])
+    janela.option_add("*TCombobox*Listbox.background", cores["field"])
+    janela.option_add("*TCombobox*Listbox.foreground", cores["fg"])
+    janela.option_add("*TCombobox*Listbox.selectBackground", cores["select"])
+    janela.option_add("*TCombobox*Listbox.selectForeground", cores["fg"])
 
     def aplicar_widget(widget):
         classe = widget.winfo_class()
