@@ -6,7 +6,7 @@ import re
 
 selected_files = []
 output_format = "mp4"  # padrão
-recode_var = None
+codec_mode = "copy"  # "copy", "padrao", "avancado"
 codec_video = "libx264"
 codec_audio = "aac"
 
@@ -30,10 +30,26 @@ def extrair_tempo(s):
 
 
 def get_ffmpeg_codec_args(output_ext, recode):
-    global codec_video, codec_audio
+    global codec_video, codec_audio, codec_mode_var
     output_ext = output_ext.lower().lstrip('.')
     if not recode:
         return ["-c", "copy"]
+    
+    if codec_mode_var.get() == "padrao":
+        # Codecs fixos por formato
+        if output_ext in ["mp4", "mov", "mkv", "flv", "m4v", "asf"]:
+            return ["-c:v", "libx264", "-c:a", "aac"]
+        if output_ext == "avi":
+            return ["-c:v", "libx264", "-c:a", "libmp3lame"]
+        if output_ext == "wmv":
+            return ["-c:v", "wmv2", "-c:a", "wmav2"]
+        if output_ext == "mpeg":
+            return ["-c:v", "mpeg2video", "-c:a", "mp2"]
+        if output_ext == "webm":
+            return ["-c:v", "libvpx-vp9", "-c:a", "libopus"]
+        if output_ext == "3gp":
+            return ["-c:v", "libx264", "-c:a", "aac"]
+        return ["-c:v", "libx264", "-c:a", "aac"]
     
     return ["-c:v", codec_video, "-c:a", codec_audio]
 
@@ -53,12 +69,12 @@ def converter_videos(arquivos):
         vob = Path(caminho)
         saida = vob.with_suffix(f".{output_format}")
         
-        modo = "recodificando" if recode_var.get() else "copiando"
+        modo = "recodificando" if codec_mode_var.get() != "copy" else "copiando"
         label_status.config(text=f"Convertendo ({idx+1}/{total_arquivos}): {vob.name} ({modo})")
         root.update()
 
         comando = ["ffmpeg", "-y", "-i", str(vob)]
-        codec_args = get_ffmpeg_codec_args(output_format, recode_var.get())
+        codec_args = get_ffmpeg_codec_args(output_format, codec_mode_var.get() != "copy")
         comando.extend(codec_args)
         comando.append(str(saida))
 
@@ -160,9 +176,16 @@ def atualizar_codec_video(codec):
     global codec_video
     codec_video = codec
 
-def atualizar_codec_audio(codec):
-    global codec_audio
-    codec_audio = codec
+def atualizar_codec_mode(mode):
+    global codec_mode_var
+    codec_mode_var.set(mode)
+    toggle_advanced()
+
+def toggle_advanced():
+    if codec_mode_var.get() == "avancado":
+        frame_advanced.pack(before=label_arquivos, padx=10, pady=5, fill=tk.X)
+    else:
+        frame_advanced.pack_forget()
 
 def iniciar_conversao():
     if selected_files:
@@ -172,7 +195,7 @@ def iniciar_conversao():
 
 
 def main():
-    global btn_converter, btn_selecionar, listbox_arquivos, progress_bar, label_progresso, label_status, root
+    global btn_converter, btn_selecionar, listbox_arquivos, progress_bar, label_progresso, label_status, label_arquivos, root
     
     root = tk.Tk()
     root.title("Conversor de Vídeo")
@@ -196,14 +219,21 @@ def main():
     combo_formato.pack(pady=5)
     combo_formato.bind("<<ComboboxSelected>>", lambda e: atualizar_formato(combo_formato.get()))
 
-    global recode_var
-    recode_var = tk.BooleanVar(value=False)
-    recode_check = tk.Checkbutton(root, text="Modo recodificação", variable=recode_var)
-    recode_check.pack(pady=3)
+    # Modo de codecs
+    frame_codecs = tk.Frame(root)
+    frame_codecs.pack(pady=5)
 
-    # Menu Avançado
+    global codec_mode_var
+    codec_mode_var = tk.StringVar(value=codec_mode)
+
+    tk.Radiobutton(frame_codecs, text="Igual ao original", variable=codec_mode_var, value="copy", command=lambda: atualizar_codec_mode("copy")).pack(side=tk.LEFT, padx=10)
+    tk.Radiobutton(frame_codecs, text="Codecs padrão", variable=codec_mode_var, value="padrao", command=lambda: atualizar_codec_mode("padrao")).pack(side=tk.LEFT, padx=10)
+    tk.Radiobutton(frame_codecs, text="Codecs avançados", variable=codec_mode_var, value="avancado", command=lambda: atualizar_codec_mode("avancado")).pack(side=tk.LEFT, padx=10)
+
+    # Menu Avançado (inicialmente oculto)
+    global frame_advanced
     frame_advanced = tk.LabelFrame(root, text="Avançado (recodificação)", font=("Arial", 9), padx=10, pady=5)
-    frame_advanced.pack(padx=10, pady=5, fill=tk.X)
+    # Não pack inicialmente
 
     tk.Label(frame_advanced, text="Vídeo:", font=("Arial", 8)).pack(anchor="w")
     codecs_video = ["libx264", "libx265", "libvpx", "libvpx-vp9", "mpeg2video", "wmv2"]
@@ -219,7 +249,11 @@ def main():
     combo_audio.pack(padx=5, pady=2, fill=tk.X)
     combo_audio.bind("<<ComboboxSelected>>", lambda e: atualizar_codec_audio(combo_audio.get()))
 
-    tk.Label(root, text="Arquivos selecionados:", font=("Arial", 9)).pack(anchor="w", padx=10)
+    label_arquivos = tk.Label(root, text="Arquivos selecionados:", font=("Arial", 9))
+    label_arquivos.pack(anchor="w", padx=10)
+
+    # Garantir estado inicial
+    toggle_advanced()
 
     frame_listbox = tk.Frame(root)
     frame_listbox.pack(padx=10, pady=5, fill=tk.BOTH, expand=True)
