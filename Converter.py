@@ -226,13 +226,13 @@ def main():
     global codec_mode_var
     codec_mode_var = tk.StringVar(value=codec_mode)
 
-    tk.Radiobutton(frame_codecs, text="Igual ao original", variable=codec_mode_var, value="copy", command=lambda: atualizar_codec_mode("copy")).pack(side=tk.LEFT, padx=10)
-    tk.Radiobutton(frame_codecs, text="Codecs padrão", variable=codec_mode_var, value="padrao", command=lambda: atualizar_codec_mode("padrao")).pack(side=tk.LEFT, padx=10)
-    tk.Radiobutton(frame_codecs, text="Codecs avançados", variable=codec_mode_var, value="avancado", command=lambda: atualizar_codec_mode("avancado")).pack(side=tk.LEFT, padx=10)
+    tk.Radiobutton(frame_codecs, text="Codec Original", variable=codec_mode_var, value="copy", command=lambda: atualizar_codec_mode("copy")).pack(side=tk.LEFT, padx=10)
+    tk.Radiobutton(frame_codecs, text="Codec Padrão", variable=codec_mode_var, value="padrao", command=lambda: atualizar_codec_mode("padrao")).pack(side=tk.LEFT, padx=10)
+    tk.Radiobutton(frame_codecs, text="Codec Avançado", variable=codec_mode_var, value="avancado", command=lambda: atualizar_codec_mode("avancado")).pack(side=tk.LEFT, padx=10)
 
     # Menu Avançado (inicialmente oculto)
     global frame_advanced
-    frame_advanced = tk.LabelFrame(root, text="Avançado (recodificação)", font=("Arial", 9), padx=10, pady=5)
+    frame_advanced = tk.LabelFrame(root, text="Codec Avançado", font=("Arial", 9), padx=10, pady=5)
     # Não pack inicialmente
 
     tk.Label(frame_advanced, text="Vídeo:", font=("Arial", 8)).pack(anchor="w")
