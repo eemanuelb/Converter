@@ -5,6 +5,7 @@ from tkinter import filedialog, messagebox, ttk
 import re
 import json
 import os
+from datetime import datetime
 
 selected_files = []
 output_format = "mp4"  # padrão
@@ -16,51 +17,51 @@ keep_on_top = False
 settings_path = Path(os.getenv("APPDATA", Path.home())) / "Conversor" / "settings.json"
 
 video_codec_options = {
-    "H.264": "libx264",
-    "H.265": "libx265",
     "AV1": "libaom-av1",
-    "MPEG-4": "mpeg4",
+    "DNxHD": "dnxhd",
     "H.261": "h261",
     "H.263": "h263",
+    "H.264": "libx264",
+    "H.265": "libx265",
+    "MJPEG": "mjpeg",
+    "MPEG-2": "mpeg2video",
+    "MPEG-4": "mpeg4",
+    "ProRes": "prores_ks",
+    "Theora": "libtheora",
+    "VP7": "vp7",
     "VP8": "libvpx",
     "VP9": "libvpx-vp9",
-    "VP7": "vp7",
-    "Theora": "libtheora",
-    "MPEG-2": "mpeg2video",
-    "MJPEG": "mjpeg",
-    "ProRes": "prores_ks",
-    "DNxHD": "dnxhd",
     "WMV": "wmv2",
 }
 
 audio_codec_options = {
     "AAC": "aac",
-    "MP3": "libmp3lame",
-    "Opus": "libopus",
-    "Vorbis": "libvorbis",
-    "FLAC": "flac",
-    "ALAC": "alac",
     "AC3": "ac3",
-    "E-AC3": "eac3",
-    "DTS": "dts",
+    "ALAC": "alac",
     "AMR-NB": "libopencore_amrnb",
     "AMR-WB": "libvo_amrwbenc",
+    "DTS": "dts",
+    "E-AC3": "eac3",
+    "FLAC": "flac",
+    "MP2": "mp2",
+    "MP3": "libmp3lame",
+    "Opus": "libopus",
+    "PCM": "pcm_s16le",
+    "Vorbis": "libvorbis",
     "WavPack": "wavpack",
     "WMA": "wmav2",
-    "MP2": "mp2",
-    "PCM": "pcm_s16le",
 }
 
 formatos_suportados = [
-    '.vob', '.mov', '.avi', '.mkv', '.wmv', '.mpeg', '.webm',
-    '.mp4', '.flv', '.m4v', '.3gp', '.asf', '.ogv', '.m2ts',
-    '.ts', '.f4v', '.mxf', '.gif'
+    '.3gp', '.asf', '.avi', '.f4v', '.flv', '.gif', '.m2ts',
+    '.m4v', '.mkv', '.mov', '.mp4', '.mpeg', '.mxf', '.ogv',
+    '.ts', '.vob', '.webm', '.wmv'
 ]
 
 formatos_saida = [
-    'mp4', 'avi', 'mov', 'mkv', 'wmv', 'mpeg', 'webm',
-    'flv', 'm4v', '3gp', 'asf', 'vob', 'ogv', 'm2ts',
-    'ts', 'f4v', 'mxf', 'gif'
+    '3gp', 'asf', 'avi', 'f4v', 'flv', 'gif', 'm2ts',
+    'm4v', 'mkv', 'mov', 'mp4', 'mpeg', 'mxf', 'ogv',
+    'ts', 'vob', 'webm', 'wmv'
 ]
 
 def encontrar_rotulo_codec(opcoes, encoder, padrao):
@@ -118,6 +119,18 @@ def salvar_configuracoes():
 
 carregar_configuracoes()
 
+def registrar_log(mensagem):
+    horario = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    linha = f"[{horario}] {mensagem}\n"
+    try:
+        log_text.config(state=tk.NORMAL)
+        log_text.insert(tk.END, linha)
+        log_text.see(tk.END)
+        log_text.config(state=tk.DISABLED)
+    except NameError:
+        print(linha, end="")
+
+
 def extrair_tempo(s):
     """Extrai tempo em segundos de uma string de tempo (HH:MM:SS.ms)"""
     match = re.search(r'(\d+):(\d+):(\d+)', s)
@@ -156,12 +169,14 @@ def converter_videos(arquivos):
     global output_format
     if not arquivos:
         messagebox.showwarning("Aviso", "Nenhum arquivo selecionado.")
+        registrar_log("Aviso: tentativa de conversao sem arquivos selecionados.")
         return
 
     btn_converter.config(state=tk.DISABLED)
     btn_selecionar.config(state=tk.DISABLED)
     
     total_arquivos = len(arquivos)
+    registrar_log(f"Iniciando conversao de {total_arquivos} arquivo(s).")
     
     for idx, caminho in enumerate(arquivos):
         vob = Path(caminho)
@@ -175,17 +190,29 @@ def converter_videos(arquivos):
         codec_args = get_ffmpeg_codec_args(output_format, codec_mode_var.get() != "copy")
         comando.extend(codec_args)
         comando.append(str(saida))
+        registrar_log(f"Convertendo arquivo: {vob.name}")
+        registrar_log(f"Comando: {subprocess.list2cmdline(comando)}")
 
-        proc = subprocess.Popen(
-            comando,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            universal_newlines=True
-        )
+        try:
+            proc = subprocess.Popen(
+                comando,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                universal_newlines=True
+            )
+        except FileNotFoundError:
+            registrar_log("Erro: ffmpeg nao foi encontrado no PATH do sistema.")
+            label_status.config(text="Erro: ffmpeg não encontrado")
+            messagebox.showerror("Erro", "FFmpeg não foi encontrado. Verifique se ele está instalado e no PATH.")
+            btn_converter.config(state=tk.NORMAL)
+            btn_selecionar.config(state=tk.NORMAL)
+            return
         
         duracao_total = 0
+        linhas_erro = []
         
         for linha in proc.stderr:
+            linhas_erro.append(linha.rstrip())
             if "Duration:" in linha:
                 duracao_str = linha.split("Duration:")[1].split(",")[0].strip()
                 duracao_total = extrair_tempo(duracao_str)
@@ -206,6 +233,11 @@ def converter_videos(arquivos):
         proc.wait()
         if proc.returncode != 0:
             label_status.config(text=f"Erro ao converter: {vob.name}")
+            registrar_log(f"Erro ao converter {vob.name}. Codigo de saida: {proc.returncode}")
+            if linhas_erro:
+                registrar_log("Saida de erro do ffmpeg:")
+                for linha in linhas_erro[-25:]:
+                    registrar_log(f"  {linha}")
             messagebox.showerror("Erro", f"Falha ao converter {vob.name}. Verifique o formato e tente novamente.")
             btn_converter.config(state=tk.NORMAL)
             btn_selecionar.config(state=tk.NORMAL)
@@ -214,6 +246,7 @@ def converter_videos(arquivos):
         progress_bar.config(value=100)
         label_progresso.config(text="100%")
         root.update()
+        registrar_log(f"Conversao concluida: {saida.name}")
         
         # Remover arquivo da lista após conversão bem-sucedida
         try:
@@ -224,6 +257,7 @@ def converter_videos(arquivos):
             pass
     
     messagebox.showinfo("Pronto", "Conversão concluída!")
+    registrar_log("Conversao finalizada com sucesso.")
     btn_converter.config(state=tk.NORMAL)
     btn_selecionar.config(state=tk.NORMAL)
     label_status.config(text="Conversão finalizada")
@@ -252,6 +286,7 @@ def selecionar_arquivos():
             if Path(arq).suffix.lower() in formatos_suportados:
                 arquivos_validos.append(arq)
             else:
+                registrar_log(f"Arquivo ignorado por formato nao suportado: {Path(arq).name}")
                 messagebox.showwarning("Formato não suportado", f"O arquivo {Path(arq).name} não é suportado.")
         
         selected_files = arquivos_validos
@@ -328,7 +363,7 @@ def aplicar_tema(janela, modo_escuro):
             )
         elif classe == "Button" and widget.cget("text") != "Converter":
             widget.configure(bg=cores["button"], fg=cores["fg"], activebackground=cores["field"], activeforeground=cores["fg"])
-        elif classe == "Listbox":
+        elif classe in {"Listbox", "Text"}:
             widget.configure(bg=cores["field"], fg=cores["fg"], selectbackground=cores["select"], selectforeground=cores["fg"])
 
         for filho in widget.winfo_children():
@@ -339,7 +374,7 @@ def aplicar_tema(janela, modo_escuro):
 
 
 def main():
-    global btn_converter, btn_selecionar, listbox_arquivos, progress_bar, label_progresso, label_status, label_arquivos, root
+    global btn_converter, btn_selecionar, listbox_arquivos, progress_bar, label_progresso, label_status, label_arquivos, root, log_text
     
     root = tk.Tk()
     root.title("Conversor de Vídeo")
@@ -350,8 +385,10 @@ def main():
 
     aba_video = tk.Frame(notebook)
     aba_configuracoes = tk.Frame(notebook)
+    aba_logs = tk.Frame(notebook)
     notebook.add(aba_video, text="Vídeo")
     notebook.add(aba_configuracoes, text="Configurações")
+    notebook.add(aba_logs, text="Logs")
 
     tk.Label(aba_video, text="Selecione os arquivos de vídeo para converter:", font=("Arial", 10, "bold")).pack(pady=10)
 
@@ -461,8 +498,26 @@ def main():
         command=atualizar_modo_escuro
     ).pack(anchor="w", pady=(6, 0))
 
+    frame_logs = tk.Frame(aba_logs)
+    frame_logs.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+
+    scrollbar_logs = tk.Scrollbar(frame_logs)
+    scrollbar_logs.pack(side=tk.RIGHT, fill=tk.Y)
+
+    log_text = tk.Text(frame_logs, wrap=tk.WORD, yscrollcommand=scrollbar_logs.set, state=tk.DISABLED, height=18)
+    log_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+    scrollbar_logs.config(command=log_text.yview)
+
+    def limpar_logs():
+        log_text.config(state=tk.NORMAL)
+        log_text.delete("1.0", tk.END)
+        log_text.config(state=tk.DISABLED)
+
+    tk.Button(aba_logs, text="Limpar Logs", command=limpar_logs, width=16).pack(pady=(0, 10))
+
     root.attributes("-topmost", keep_on_top)
     aplicar_tema(root, dark_mode)
+    registrar_log("Aplicativo iniciado.")
 
     root.mainloop()
 
