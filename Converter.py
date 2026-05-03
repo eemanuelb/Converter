@@ -12,14 +12,14 @@ codec_audio = "aac"
 
 video_codec_options = {
     "H.264": "libx264",
-    "H.265 / HEVC": "libx265",
+    "H.265": "libx265",
     "MPEG-4": "mpeg4",
     "VP8": "libvpx",
     "VP9": "libvpx-vp9",
     "Theora": "libtheora",
     "MPEG-2": "mpeg2video",
     "ProRes": "prores_ks",
-    "DNxHD / DNxHR": "dnxhd",
+    "DNxHD": "dnxhd",
     "WMV": "wmv2",
 }
 
@@ -32,7 +32,7 @@ audio_codec_options = {
     "ALAC": "alac",
     "WMA": "wmav2",
     "MP2": "mp2",
-    "PCM / WAV": "pcm_s16le",
+    "PCM": "pcm_s16le",
 }
 
 formatos_suportados = [
