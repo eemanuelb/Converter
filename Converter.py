@@ -464,6 +464,23 @@ def aplicar_tema(janela, modo_escuro):
     aplicar_widget(janela)
 
 
+def configurar_combobox(combo):
+    def suspender_topmost(_event=None):
+        janela = combo.winfo_toplevel()
+        if keep_on_top:
+            janela.attributes("-topmost", False)
+
+    def restaurar_topmost(_event=None):
+        janela = combo.winfo_toplevel()
+        if keep_on_top:
+            combo.after_idle(lambda: janela.attributes("-topmost", True))
+
+    combo.bind("<ButtonPress-1>", suspender_topmost, add="+")
+    combo.bind("<<ComboboxSelected>>", restaurar_topmost, add="+")
+    combo.bind("<FocusOut>", restaurar_topmost, add="+")
+    combo.bind("<Escape>", restaurar_topmost, add="+")
+
+
 def main():
     global btn_converter, btn_selecionar, listbox_arquivos, progress_bar, label_progresso, label_status, label_arquivos, root, log_text
     
@@ -498,8 +515,9 @@ def main():
 
     combo_formato = ttk.Combobox(aba_video, values=formatos_saida, state="readonly", width=10)
     combo_formato.set(output_format)
+    configurar_combobox(combo_formato)
     combo_formato.pack(anchor="w", padx=24, pady=(0, 10))
-    combo_formato.bind("<<ComboboxSelected>>", lambda e: atualizar_formato(combo_formato.get()))
+    combo_formato.bind("<<ComboboxSelected>>", lambda e: atualizar_formato(combo_formato.get()), add="+")
 
     # Modo de codecs
     frame_codecs = tk.Frame(aba_video)
@@ -521,15 +539,17 @@ def main():
     codecs_video = list(video_codec_options.keys())
     combo_video = ttk.Combobox(frame_advanced, values=codecs_video, state="readonly", width=20)
     combo_video.set(encontrar_rotulo_codec(video_codec_options, codec_video, "H.264"))
+    configurar_combobox(combo_video)
     combo_video.pack(pady=(2, 8), fill=tk.X)
-    combo_video.bind("<<ComboboxSelected>>", lambda e: atualizar_codec_video(combo_video.get()))
+    combo_video.bind("<<ComboboxSelected>>", lambda e: atualizar_codec_video(combo_video.get()), add="+")
 
     ttk.Label(frame_advanced, text="Áudio:", style="Card.TLabel").pack(anchor="w")
     codecs_audio = list(audio_codec_options.keys())
     combo_audio = ttk.Combobox(frame_advanced, values=codecs_audio, state="readonly", width=20)
     combo_audio.set(encontrar_rotulo_codec(audio_codec_options, codec_audio, "AAC"))
+    configurar_combobox(combo_audio)
     combo_audio.pack(pady=(2, 0), fill=tk.X)
-    combo_audio.bind("<<ComboboxSelected>>", lambda e: atualizar_codec_audio(combo_audio.get()))
+    combo_audio.bind("<<ComboboxSelected>>", lambda e: atualizar_codec_audio(combo_audio.get()), add="+")
 
     label_arquivos = ttk.Label(aba_video, text="Arquivos selecionados")
     label_arquivos.pack(anchor="w", padx=24, pady=(4, 4))
