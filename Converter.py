@@ -72,6 +72,9 @@ formatos_saida = [
     'ts', 'vob', 'webm', 'wmv'
 ]
 
+formatos_com_preset_obrigatorio = {"gif", "mxf", "ogv", "vob"}
+
+
 def encontrar_rotulo_codec(opcoes, encoder, padrao):
     for rotulo, valor in opcoes.items():
         if valor == encoder:
@@ -260,14 +263,52 @@ def extrair_tempo(s):
     return 0
 
 
-def get_ffmpeg_codec_args(output_ext, recode, mode=None, video_encoder=None, audio_encoder=None):
+def get_ffmpeg_output_args(output_ext, mode=None, video_encoder=None, audio_encoder=None):
     global codec_video, codec_audio
     output_ext = output_ext.lower().lstrip('.')
     mode = mode or codec_mode
     video_encoder = video_encoder or codec_video
     audio_encoder = audio_encoder or codec_audio
 
-    if not recode:
+    if output_ext == "gif":
+        return [
+            "-map", "0:v:0",
+            "-an",
+            "-vf", "fps=12,scale=trunc(iw/2)*2:-1:flags=lanczos",
+            "-loop", "0",
+        ]
+
+    if output_ext == "vob":
+        return [
+            "-map", "0:v:0",
+            "-map", "0:a?",
+            "-c:v", "mpeg2video",
+            "-c:a", "ac3",
+            "-f", "vob",
+        ]
+
+    if output_ext == "ogv":
+        return [
+            "-map", "0:v:0",
+            "-map", "0:a?",
+            "-c:v", "libtheora",
+            "-c:a", "libvorbis",
+            "-f", "ogg",
+        ]
+
+    if output_ext == "mxf":
+        return [
+            "-map", "0:v:0",
+            "-map", "0:a?",
+            "-c:v", "mpeg2video",
+            "-pix_fmt", "yuv422p",
+            "-b:v", "50M",
+            "-c:a", "pcm_s16le",
+            "-ar", "48000",
+            "-f", "mxf",
+        ]
+
+    if mode == "copy":
         return ["-c", "copy"]
     
     if mode == "padrao":
@@ -313,13 +354,13 @@ def converter_videos(arquivos):
         vob = Path(caminho)
         saida = vob.with_suffix(f".{formato_saida}")
         
-        modo = "recodificando" if modo_codec != "copy" else "copiando"
+        usa_preset_obrigatorio = formato_saida.lower() in formatos_com_preset_obrigatorio
+        modo = "recodificando" if modo_codec != "copy" or usa_preset_obrigatorio else "copiando"
         atualizar_status(f"Convertendo ({idx+1}/{total_arquivos}): {vob.name} ({modo})")
 
         comando = ["ffmpeg", "-y", "-i", str(vob)]
-        codec_args = get_ffmpeg_codec_args(
+        codec_args = get_ffmpeg_output_args(
             formato_saida,
-            modo_codec != "copy",
             modo_codec,
             video_encoder,
             audio_encoder,
