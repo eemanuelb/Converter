@@ -12,7 +12,6 @@ import threading
 
 selected_files = []
 output_format = "mp4"  # padrão
-codec_mode = "copy"  # "copy", "padrao", "avancado"
 codec_video = "libx264"
 codec_audio = "aac"
 dark_mode = False
@@ -27,6 +26,7 @@ settings_path = Path(os.getenv("APPDATA", Path.home())) / "Conversor" / "setting
 video_codec_options = {
     "AV1": "libaom-av1",
     "DNxHD": "dnxhd",
+    "GIF": "gif",
     "H.261": "h261",
     "H.263": "h263",
     "H.264": "libx264",
@@ -72,7 +72,26 @@ formatos_saida = [
     'ts', 'vob', 'webm', 'wmv'
 ]
 
-formatos_com_recodificacao_obrigatoria = {"gif", "mpeg", "mxf", "ogv", "vob", "webm"}
+codec_presets_por_formato = {
+    "3gp": ("H.264", "AAC"),
+    "asf": ("H.264", "AAC"),
+    "avi": ("H.264", "MP3"),
+    "f4v": ("H.264", "AAC"),
+    "flv": ("H.264", "AAC"),
+    "gif": ("GIF", None),
+    "m2ts": ("H.264", "AAC"),
+    "m4v": ("H.264", "AAC"),
+    "mkv": ("H.264", "AAC"),
+    "mov": ("H.264", "AAC"),
+    "mp4": ("H.264", "AAC"),
+    "mpeg": ("MPEG-2", "MP2"),
+    "mxf": ("MPEG-2", "PCM"),
+    "ogv": ("Theora", "Vorbis"),
+    "ts": ("H.264", "AAC"),
+    "vob": ("MPEG-2", "AC3"),
+    "webm": ("VP9", "Opus"),
+    "wmv": ("WMV", "WMA"),
+}
 
 
 def encontrar_rotulo_codec(opcoes, encoder, padrao):
@@ -83,7 +102,7 @@ def encontrar_rotulo_codec(opcoes, encoder, padrao):
 
 
 def carregar_configuracoes():
-    global output_format, codec_mode, codec_video, codec_audio, dark_mode, keep_on_top
+    global output_format, codec_video, codec_audio, dark_mode, keep_on_top
     if not settings_path.exists():
         return
 
@@ -95,13 +114,6 @@ def carregar_configuracoes():
     formato = dados.get("output_format")
     if formato in formatos_saida:
         output_format = formato
-
-    modo = dados.get("codec_mode")
-    if modo in {"copy", "padrao", "avancado"}:
-        codec_mode = modo
-
-    if output_format in formatos_com_recodificacao_obrigatoria and codec_mode == "copy":
-        codec_mode = "padrao"
 
     video = dados.get("codec_video")
     if video in video_codec_options.values():
@@ -118,7 +130,6 @@ def carregar_configuracoes():
 def salvar_configuracoes():
     dados = {
         "output_format": output_format,
-        "codec_mode": codec_mode,
         "codec_video": codec_video,
         "codec_audio": codec_audio,
         "dark_mode": dark_mode,
@@ -266,76 +277,40 @@ def extrair_tempo(s):
     return 0
 
 
-def get_ffmpeg_output_args(output_ext, mode=None, video_encoder=None, audio_encoder=None):
+def get_ffmpeg_output_args(output_ext, video_encoder=None, audio_encoder=None):
     global codec_video, codec_audio
     output_ext = output_ext.lower().lstrip('.')
-    mode = mode or codec_mode
     video_encoder = video_encoder or codec_video
     audio_encoder = audio_encoder or codec_audio
-
-    if mode == "avancado":
-        return ["-c:v", video_encoder, "-c:a", audio_encoder]
 
     if output_ext == "gif":
         return [
             "-map", "0:v:0",
             "-an",
             "-vf", "fps=12,scale=trunc(iw/2)*2:-1:flags=lanczos",
+            "-c:v", video_encoder,
             "-loop", "0",
-        ]
-
-    if output_ext == "vob":
-        return [
-            "-map", "0:v:0",
-            "-map", "0:a?",
-            "-c:v", "mpeg2video",
-            "-c:a", "ac3",
-            "-f", "vob",
-        ]
-
-    if output_ext == "ogv":
-        return [
-            "-map", "0:v:0",
-            "-map", "0:a?",
-            "-c:v", "libtheora",
-            "-c:a", "libvorbis",
-            "-f", "ogg",
         ]
 
     if output_ext == "mxf":
         return [
             "-map", "0:v:0",
             "-map", "0:a?",
-            "-c:v", "mpeg2video",
+            "-c:v", video_encoder,
             "-pix_fmt", "yuv422p",
             "-b:v", "50M",
-            "-c:a", "pcm_s16le",
+            "-c:a", audio_encoder,
             "-ar", "48000",
             "-f", "mxf",
         ]
 
-    if mode == "copy" and output_ext in formatos_com_recodificacao_obrigatoria:
-        mode = "padrao"
+    if output_ext == "ogv":
+        return ["-map", "0:v:0", "-map", "0:a?", "-c:v", video_encoder, "-c:a", audio_encoder, "-f", "ogg"]
 
-    if mode == "copy":
-        return ["-c", "copy"]
-    
-    if mode == "padrao":
-        # Codecs fixos por formato
-        if output_ext in ["mp4", "mov", "mkv", "flv", "m4v", "asf"]:
-            return ["-c:v", "libx264", "-c:a", "aac"]
-        if output_ext == "avi":
-            return ["-c:v", "libx264", "-c:a", "libmp3lame"]
-        if output_ext == "wmv":
-            return ["-c:v", "wmv2", "-c:a", "wmav2"]
-        if output_ext == "mpeg":
-            return ["-c:v", "mpeg2video", "-c:a", "mp2"]
-        if output_ext == "webm":
-            return ["-c:v", "libvpx-vp9", "-c:a", "libopus"]
-        if output_ext == "3gp":
-            return ["-c:v", "libx264", "-c:a", "aac"]
-        return ["-c:v", "libx264", "-c:a", "aac"]
-    return ["-c:v", video_encoder, "-c:a", audio_encoder]
+    if output_ext == "vob":
+        return ["-map", "0:v:0", "-map", "0:a?", "-c:v", video_encoder, "-c:a", audio_encoder, "-f", "vob"]
+
+    return ["-map", "0:v:0", "-map", "0:a?", "-c:v", video_encoder, "-c:a", audio_encoder]
 
 
 def converter_videos(arquivos):
@@ -349,7 +324,6 @@ def converter_videos(arquivos):
     
     total_arquivos = len(arquivos)
     formato_saida = output_format
-    modo_codec = codec_mode
     video_encoder = codec_video
     audio_encoder = codec_audio
     registrar_log(f"Iniciando conversao de {total_arquivos} arquivo(s).")
@@ -362,14 +336,11 @@ def converter_videos(arquivos):
         vob = Path(caminho)
         saida = vob.with_suffix(f".{formato_saida}")
         
-        exige_recodificacao = formato_saida.lower() in formatos_com_recodificacao_obrigatoria
-        modo = "recodificando" if modo_codec != "copy" or exige_recodificacao else "copiando"
-        atualizar_status(f"Convertendo ({idx+1}/{total_arquivos}): {vob.name} ({modo})")
+        atualizar_status(f"Convertendo ({idx+1}/{total_arquivos}): {vob.name} (recodificando)")
 
         comando = ["ffmpeg", "-y", "-i", str(vob)]
         codec_args = get_ffmpeg_output_args(
             formato_saida,
-            modo_codec,
             video_encoder,
             audio_encoder,
         )
@@ -506,28 +477,46 @@ def selecionar_arquivos():
             listbox_arquivos.insert(tk.END, Path(arquivo).name)
 
 
-def formato_exige_recodificacao(formato=None):
-    return (formato or output_format).lower().lstrip(".") in formatos_com_recodificacao_obrigatoria
+def obter_preset_codec(formato=None):
+    return codec_presets_por_formato.get((formato or output_format).lower(), ("H.264", "AAC"))
 
 
-def atualizar_estado_codec_original():
-    if "radio_codec_original" not in globals():
+def atualizar_recomendacao_codec():
+    if "label_recomendacao_codec" not in globals():
         return
 
-    if formato_exige_recodificacao():
-        executar_na_ui(radio_codec_original.config, state=tk.DISABLED)
-        if codec_mode == "copy":
-            atualizar_codec_mode("padrao")
+    video_recomendado, audio_recomendado = obter_preset_codec()
+    if audio_recomendado:
+        texto = f"Recomendado para .{output_format}: {video_recomendado} + {audio_recomendado}"
+        executar_na_ui(menu_audio.config, state=tk.NORMAL)
     else:
-        executar_na_ui(radio_codec_original.config, state=tk.NORMAL)
+        texto = f"Recomendado para .{output_format}: {video_recomendado}, sem audio"
+        if "menu_audio_var" in globals():
+            menu_audio_var.set("Sem audio")
+        executar_na_ui(menu_audio.config, state=tk.DISABLED)
+
+    executar_na_ui(label_recomendacao_codec.config, text=texto)
+
+
+def aplicar_preset_codec(formato=None):
+    global codec_video, codec_audio
+    video_recomendado, audio_recomendado = obter_preset_codec(formato)
+    codec_video = video_codec_options[video_recomendado]
+
+    if "menu_video_var" in globals():
+        menu_video_var.set(video_recomendado)
+
+    if audio_recomendado:
+        codec_audio = audio_codec_options[audio_recomendado]
+        if "menu_audio_var" in globals():
+            menu_audio_var.set(audio_recomendado)
 
 
 def atualizar_formato(formato):
     global output_format
     output_format = formato
-    if formato_exige_recodificacao() and codec_mode == "copy":
-        atualizar_codec_mode("padrao")
-    atualizar_estado_codec_original()
+    aplicar_preset_codec(formato)
+    atualizar_recomendacao_codec()
     salvar_configuracoes()
 
 def atualizar_codec_video(codec):
@@ -539,19 +528,6 @@ def atualizar_codec_audio(codec):
     global codec_audio
     codec_audio = audio_codec_options[codec]
     salvar_configuracoes()
-
-def atualizar_codec_mode(mode):
-    global codec_mode, codec_mode_var
-    codec_mode = mode
-    codec_mode_var.set(mode)
-    toggle_advanced()
-    salvar_configuracoes()
-
-def toggle_advanced():
-    if codec_mode_var.get() == "avancado":
-        frame_advanced.pack(before=label_arquivos, padx=18, pady=(0, 10), fill=tk.X)
-    else:
-        frame_advanced.pack_forget()
 
 
 def alternar_pausa():
@@ -747,7 +723,7 @@ def criar_menu_selecao(parent, opcoes, valor_inicial, ao_selecionar, width=20):
 
 
 def main():
-    global btn_converter, btn_pausar, btn_parar, btn_selecionar, radio_codec_original, listbox_arquivos, progress_bar, label_progresso, label_status, label_arquivos, root, log_text
+    global btn_converter, btn_pausar, btn_parar, btn_selecionar, menu_video, menu_video_var, menu_audio, menu_audio_var, label_recomendacao_codec, listbox_arquivos, progress_bar, label_progresso, label_status, label_arquivos, root, log_text
     
     root = tk.Tk()
     root.title("Conversor de Vídeo")
@@ -781,38 +757,34 @@ def main():
     menu_formato, _ = criar_menu_selecao(aba_video, formatos_saida, output_format, atualizar_formato, width=10)
     menu_formato.pack(anchor="w", padx=24, pady=(0, 10))
 
-    # Modo de codecs
-    frame_codecs = tk.Frame(aba_video)
+    frame_codecs = ttk.LabelFrame(aba_video, text="Codecs", padding=(12, 8))
     frame_codecs.pack(fill=tk.X, padx=18, pady=(0, 10))
 
-    global codec_mode_var
-    codec_mode_var = tk.StringVar(value=codec_mode)
+    label_recomendacao_codec = ttk.Label(frame_codecs, text="", style="Card.TLabel")
+    label_recomendacao_codec.pack(anchor="w", pady=(0, 8))
 
-    radio_codec_original = ttk.Radiobutton(frame_codecs, text="Codec Original", variable=codec_mode_var, value="copy", command=lambda: atualizar_codec_mode("copy"))
-    radio_codec_original.pack(side=tk.LEFT, padx=8)
-    ttk.Radiobutton(frame_codecs, text="Codec Padrão", variable=codec_mode_var, value="padrao", command=lambda: atualizar_codec_mode("padrao")).pack(side=tk.LEFT, padx=8)
-    ttk.Radiobutton(frame_codecs, text="Codec Avançado", variable=codec_mode_var, value="avancado", command=lambda: atualizar_codec_mode("avancado")).pack(side=tk.LEFT, padx=8)
+    frame_menus_codec = tk.Frame(frame_codecs)
+    frame_menus_codec.pack(fill=tk.X)
 
-    # Menu Avançado (inicialmente oculto)
-    global frame_advanced
-    frame_advanced = ttk.LabelFrame(aba_video, text="Codec Avançado", padding=(12, 8))
-    # Não pack inicialmente
-
-    ttk.Label(frame_advanced, text="Vídeo:", style="Card.TLabel").pack(anchor="w")
+    frame_codec_video = tk.Frame(frame_menus_codec)
+    frame_codec_video.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 8))
+    ttk.Label(frame_codec_video, text="Video:", style="Card.TLabel").pack(anchor="w")
     codecs_video = list(video_codec_options.keys())
-    menu_video, _ = criar_menu_selecao(
-        frame_advanced,
+    menu_video, menu_video_var = criar_menu_selecao(
+        frame_codec_video,
         codecs_video,
         encontrar_rotulo_codec(video_codec_options, codec_video, "H.264"),
         atualizar_codec_video,
         width=20,
     )
-    menu_video.pack(pady=(2, 8), fill=tk.X)
+    menu_video.pack(pady=(2, 0), fill=tk.X)
 
-    ttk.Label(frame_advanced, text="Áudio:", style="Card.TLabel").pack(anchor="w")
+    frame_codec_audio = tk.Frame(frame_menus_codec)
+    frame_codec_audio.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(8, 0))
+    ttk.Label(frame_codec_audio, text="Audio:", style="Card.TLabel").pack(anchor="w")
     codecs_audio = list(audio_codec_options.keys())
-    menu_audio, _ = criar_menu_selecao(
-        frame_advanced,
+    menu_audio, menu_audio_var = criar_menu_selecao(
+        frame_codec_audio,
         codecs_audio,
         encontrar_rotulo_codec(audio_codec_options, codec_audio, "AAC"),
         atualizar_codec_audio,
@@ -823,9 +795,7 @@ def main():
     label_arquivos = ttk.Label(aba_video, text="Arquivos selecionados")
     label_arquivos.pack(anchor="w", padx=24, pady=(4, 4))
 
-    # Garantir estado inicial
-    atualizar_estado_codec_original()
-    toggle_advanced()
+    atualizar_recomendacao_codec()
 
     frame_listbox = tk.Frame(aba_video)
     frame_listbox.pack(padx=18, pady=(0, 10), fill=tk.BOTH, expand=True)
