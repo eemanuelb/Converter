@@ -356,7 +356,7 @@ def atualizar_codec_mode(mode):
 
 def toggle_advanced():
     if codec_mode_var.get() == "avancado":
-        frame_advanced.pack(before=label_arquivos, padx=10, pady=5, fill=tk.X)
+        frame_advanced.pack(before=label_arquivos, padx=18, pady=(0, 10), fill=tk.X)
     else:
         frame_advanced.pack_forget()
 
@@ -371,19 +371,48 @@ def iniciar_conversao():
 
 def aplicar_tema(janela, modo_escuro):
     cores = {
-        "bg": "#1f1f1f" if modo_escuro else "#f0f0f0",
-        "fg": "#f2f2f2" if modo_escuro else "#000000",
-        "field": "#2b2b2b" if modo_escuro else "#ffffff",
-        "button": "#333333" if modo_escuro else "#f0f0f0",
-        "select": "#3a3a3a" if modo_escuro else "#d9e8fb",
+        "bg": "#15171a" if modo_escuro else "#f4f6f8",
+        "fg": "#f4f7fb" if modo_escuro else "#1f2933",
+        "muted": "#aeb7c2" if modo_escuro else "#5f6b7a",
+        "field": "#20242a" if modo_escuro else "#ffffff",
+        "button": "#2a3038" if modo_escuro else "#e8edf3",
+        "button_hover": "#363e49" if modo_escuro else "#dce4ee",
+        "border": "#333b46" if modo_escuro else "#d7dee8",
+        "select": "#345174" if modo_escuro else "#cfe3ff",
+        "accent": "#3b82f6",
+        "accent_hover": "#2563eb",
+        "success": "#22a55f",
+        "success_hover": "#16834b",
     }
 
     style = ttk.Style(janela)
     style.theme_use("clam")
-    style.configure("TNotebook", background=cores["bg"], borderwidth=0)
-    style.configure("TNotebook.Tab", background=cores["button"], foreground=cores["fg"], padding=(10, 5))
-    style.map("TNotebook.Tab", background=[("selected", cores["field"])])
-    style.configure("TCombobox", fieldbackground=cores["field"], background=cores["button"], foreground=cores["fg"])
+    style.configure("TFrame", background=cores["bg"])
+    style.configure("Card.TFrame", background=cores["field"], relief=tk.FLAT)
+    style.configure("TLabel", background=cores["bg"], foreground=cores["fg"])
+    style.configure("Title.TLabel", background=cores["bg"], foreground=cores["fg"], font=("Segoe UI", 14, "bold"))
+    style.configure("Muted.TLabel", background=cores["bg"], foreground=cores["muted"], font=("Segoe UI", 9))
+    style.configure("Card.TLabel", background=cores["field"], foreground=cores["fg"])
+    style.configure("TNotebook", background=cores["bg"], borderwidth=0, tabmargins=(12, 8, 12, 0))
+    style.configure("TNotebook.Tab", background=cores["button"], foreground=cores["fg"], padding=(16, 8), font=("Segoe UI", 9))
+    style.map(
+        "TNotebook.Tab",
+        background=[("selected", cores["field"]), ("active", cores["button_hover"])],
+        foreground=[("selected", cores["fg"])],
+    )
+    style.configure("TButton", background=cores["button"], foreground=cores["fg"], borderwidth=0, padding=(12, 7), font=("Segoe UI", 9))
+    style.map("TButton", background=[("active", cores["button_hover"]), ("disabled", cores["border"])])
+    style.configure("Accent.TButton", background=cores["accent"], foreground="#ffffff")
+    style.map("Accent.TButton", background=[("active", cores["accent_hover"]), ("disabled", cores["border"])])
+    style.configure("Success.TButton", background=cores["success"], foreground="#ffffff", padding=(18, 9), font=("Segoe UI", 10, "bold"))
+    style.map("Success.TButton", background=[("active", cores["success_hover"]), ("disabled", cores["border"])])
+    style.configure("TCheckbutton", background=cores["bg"], foreground=cores["fg"], font=("Segoe UI", 9))
+    style.configure("TRadiobutton", background=cores["bg"], foreground=cores["fg"], font=("Segoe UI", 9))
+    style.map("TCheckbutton", background=[("active", cores["bg"])], foreground=[("active", cores["fg"])])
+    style.map("TRadiobutton", background=[("active", cores["bg"])], foreground=[("active", cores["fg"])])
+    style.configure("TLabelframe", background=cores["field"], bordercolor=cores["border"], relief=tk.SOLID)
+    style.configure("TLabelframe.Label", background=cores["field"], foreground=cores["fg"], font=("Segoe UI", 9, "bold"))
+    style.configure("TCombobox", fieldbackground=cores["field"], background=cores["button"], foreground=cores["fg"], arrowcolor=cores["fg"], padding=5)
     style.map(
         "TCombobox",
         fieldbackground=[("readonly", cores["field"])],
@@ -396,13 +425,16 @@ def aplicar_tema(janela, modo_escuro):
     janela.option_add("*TCombobox*Listbox.foreground", cores["fg"])
     janela.option_add("*TCombobox*Listbox.selectBackground", cores["select"])
     janela.option_add("*TCombobox*Listbox.selectForeground", cores["fg"])
+    janela.option_add("*Font", "Segoe UI 9")
 
     def aplicar_widget(widget):
         classe = widget.winfo_class()
-        if classe in {"Frame", "Labelframe", "TFrame"}:
+        if classe == "Frame":
             widget.configure(bg=cores["bg"])
         elif classe == "Label":
             widget.configure(bg=cores["bg"], fg=cores["fg"])
+        elif classe == "Labelframe":
+            widget.configure(bg=cores["field"], fg=cores["fg"], highlightbackground=cores["border"], highlightcolor=cores["border"])
         elif classe in {"Radiobutton", "Checkbutton"}:
             widget.configure(
                 bg=cores["bg"],
@@ -414,7 +446,16 @@ def aplicar_tema(janela, modo_escuro):
         elif classe == "Button" and widget.cget("text") != "Converter":
             widget.configure(bg=cores["button"], fg=cores["fg"], activebackground=cores["field"], activeforeground=cores["fg"])
         elif classe in {"Listbox", "Text"}:
-            widget.configure(bg=cores["field"], fg=cores["fg"], selectbackground=cores["select"], selectforeground=cores["fg"])
+            widget.configure(
+                bg=cores["field"],
+                fg=cores["fg"],
+                selectbackground=cores["select"],
+                selectforeground=cores["fg"],
+                highlightthickness=1,
+                highlightbackground=cores["border"],
+                relief=tk.FLAT,
+                borderwidth=0,
+            )
 
         for filho in widget.winfo_children():
             aplicar_widget(filho)
@@ -428,10 +469,11 @@ def main():
     
     root = tk.Tk()
     root.title("Conversor de Vídeo")
-    root.geometry("550x600")
+    root.geometry("720x680")
+    root.minsize(640, 620)
 
     notebook = ttk.Notebook(root)
-    notebook.pack(fill=tk.BOTH, expand=True)
+    notebook.pack(fill=tk.BOTH, expand=True, padx=12, pady=12)
 
     aba_video = tk.Frame(notebook)
     aba_configuracoes = tk.Frame(notebook)
@@ -440,62 +482,63 @@ def main():
     notebook.add(aba_configuracoes, text="Configurações")
     notebook.add(aba_logs, text="Logs")
 
-    tk.Label(aba_video, text="Selecione os arquivos de vídeo para converter:", font=("Arial", 10, "bold")).pack(pady=10)
+    ttk.Label(aba_video, text="Conversão de vídeo", style="Title.TLabel").pack(anchor="w", padx=18, pady=(16, 2))
+    ttk.Label(aba_video, text="Selecione arquivos, escolha o formato e acompanhe o progresso.", style="Muted.TLabel").pack(anchor="w", padx=18, pady=(0, 12))
 
     frame_botoes = tk.Frame(aba_video)
-    frame_botoes.pack(pady=5)
+    frame_botoes.pack(fill=tk.X, padx=18, pady=(0, 10))
 
-    btn_selecionar = tk.Button(frame_botoes, text="Selecionar Arquivos", command=selecionar_arquivos, width=20)
+    btn_selecionar = ttk.Button(frame_botoes, text="Selecionar Arquivos", command=selecionar_arquivos, width=20, style="Accent.TButton")
     btn_selecionar.pack(side=tk.LEFT, padx=5)
 
-    btn_remover = tk.Button(frame_botoes, text="Remover Selecionado", command=lambda: remover_arquivo())
+    btn_remover = ttk.Button(frame_botoes, text="Remover Selecionado", command=lambda: remover_arquivo())
     btn_remover.pack(side=tk.LEFT, padx=5)
 
-    tk.Label(aba_video, text="Formato de saída:", font=("Arial", 9)).pack(pady=5)
+    ttk.Label(aba_video, text="Formato de saída").pack(anchor="w", padx=24, pady=(2, 4))
 
     combo_formato = ttk.Combobox(aba_video, values=formatos_saida, state="readonly", width=10)
     combo_formato.set(output_format)
-    combo_formato.pack(pady=5)
+    combo_formato.pack(anchor="w", padx=24, pady=(0, 10))
     combo_formato.bind("<<ComboboxSelected>>", lambda e: atualizar_formato(combo_formato.get()))
 
     # Modo de codecs
     frame_codecs = tk.Frame(aba_video)
-    frame_codecs.pack(pady=5)
+    frame_codecs.pack(fill=tk.X, padx=18, pady=(0, 10))
 
     global codec_mode_var
     codec_mode_var = tk.StringVar(value=codec_mode)
 
-    tk.Radiobutton(frame_codecs, text="Codec Original", variable=codec_mode_var, value="copy", command=lambda: atualizar_codec_mode("copy")).pack(side=tk.LEFT, padx=10)
-    tk.Radiobutton(frame_codecs, text="Codec Padrão", variable=codec_mode_var, value="padrao", command=lambda: atualizar_codec_mode("padrao")).pack(side=tk.LEFT, padx=10)
-    tk.Radiobutton(frame_codecs, text="Codec Avançado", variable=codec_mode_var, value="avancado", command=lambda: atualizar_codec_mode("avancado")).pack(side=tk.LEFT, padx=10)
+    ttk.Radiobutton(frame_codecs, text="Codec Original", variable=codec_mode_var, value="copy", command=lambda: atualizar_codec_mode("copy")).pack(side=tk.LEFT, padx=8)
+    ttk.Radiobutton(frame_codecs, text="Codec Padrão", variable=codec_mode_var, value="padrao", command=lambda: atualizar_codec_mode("padrao")).pack(side=tk.LEFT, padx=8)
+    ttk.Radiobutton(frame_codecs, text="Codec Avançado", variable=codec_mode_var, value="avancado", command=lambda: atualizar_codec_mode("avancado")).pack(side=tk.LEFT, padx=8)
 
     # Menu Avançado (inicialmente oculto)
     global frame_advanced
-    frame_advanced = tk.LabelFrame(aba_video, text="Codec Avançado", font=("Arial", 9), padx=10, pady=5)
+    frame_advanced = ttk.LabelFrame(aba_video, text="Codec Avançado", padding=(12, 8))
     # Não pack inicialmente
 
-    tk.Label(frame_advanced, text="Vídeo:", font=("Arial", 8)).pack(anchor="w")
+    ttk.Label(frame_advanced, text="Vídeo:", style="Card.TLabel").pack(anchor="w")
     codecs_video = list(video_codec_options.keys())
     combo_video = ttk.Combobox(frame_advanced, values=codecs_video, state="readonly", width=20)
     combo_video.set(encontrar_rotulo_codec(video_codec_options, codec_video, "H.264"))
-    combo_video.pack(padx=5, pady=2, fill=tk.X)
+    combo_video.pack(pady=(2, 8), fill=tk.X)
     combo_video.bind("<<ComboboxSelected>>", lambda e: atualizar_codec_video(combo_video.get()))
 
-    tk.Label(frame_advanced, text="Áudio:", font=("Arial", 8)).pack(anchor="w")
+    ttk.Label(frame_advanced, text="Áudio:", style="Card.TLabel").pack(anchor="w")
     codecs_audio = list(audio_codec_options.keys())
     combo_audio = ttk.Combobox(frame_advanced, values=codecs_audio, state="readonly", width=20)
     combo_audio.set(encontrar_rotulo_codec(audio_codec_options, codec_audio, "AAC"))
-    combo_audio.pack(padx=5, pady=2, fill=tk.X)
+    combo_audio.pack(pady=(2, 0), fill=tk.X)
     combo_audio.bind("<<ComboboxSelected>>", lambda e: atualizar_codec_audio(combo_audio.get()))
 
-    label_arquivos = tk.Label(aba_video, text="Arquivos selecionados:", font=("Arial", 9))
-    label_arquivos.pack(anchor="w", padx=10)
+    label_arquivos = ttk.Label(aba_video, text="Arquivos selecionados")
+    label_arquivos.pack(anchor="w", padx=24, pady=(4, 4))
 
     # Garantir estado inicial
     toggle_advanced()
 
     frame_listbox = tk.Frame(aba_video)
-    frame_listbox.pack(padx=10, pady=5, fill=tk.BOTH, expand=True)
+    frame_listbox.pack(padx=18, pady=(0, 10), fill=tk.BOTH, expand=True)
 
     scrollbar = tk.Scrollbar(frame_listbox)
     scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
@@ -504,20 +547,23 @@ def main():
     listbox_arquivos.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
     scrollbar.config(command=listbox_arquivos.yview)
 
-    label_status = tk.Label(aba_video, text="Pronto para converter", font=("Arial", 9))
-    label_status.pack(pady=5)
+    label_status = ttk.Label(aba_video, text="Pronto para converter", style="Muted.TLabel")
+    label_status.pack(anchor="w", padx=24, pady=(0, 4))
 
     progress_bar = ttk.Progressbar(aba_video, orient=tk.HORIZONTAL, length=400, mode='determinate')
-    progress_bar.pack(pady=5, padx=10, fill=tk.X)
+    progress_bar.pack(pady=(0, 2), padx=18, fill=tk.X)
 
-    label_progresso = tk.Label(aba_video, text="0%", font=("Arial", 9))
-    label_progresso.pack(pady=2)
+    label_progresso = ttk.Label(aba_video, text="0%", style="Muted.TLabel")
+    label_progresso.pack(anchor="e", padx=24, pady=(0, 8))
 
-    btn_converter = tk.Button(aba_video, text="Converter", width=20, command=iniciar_conversao, bg="#4CAF50", fg="white")
-    btn_converter.pack(pady=15)
+    btn_converter = ttk.Button(aba_video, text="Converter", width=20, command=iniciar_conversao, style="Success.TButton")
+    btn_converter.pack(pady=(0, 18))
 
-    frame_config_geral = tk.LabelFrame(aba_configuracoes, text="Geral", font=("Arial", 9), padx=10, pady=10)
-    frame_config_geral.pack(padx=12, pady=12, fill=tk.X)
+    ttk.Label(aba_configuracoes, text="Configurações", style="Title.TLabel").pack(anchor="w", padx=18, pady=(16, 2))
+    ttk.Label(aba_configuracoes, text="Preferências salvas automaticamente.", style="Muted.TLabel").pack(anchor="w", padx=18, pady=(0, 12))
+
+    frame_config_geral = ttk.LabelFrame(aba_configuracoes, text="Geral", padding=(14, 12))
+    frame_config_geral.pack(padx=18, pady=(0, 12), fill=tk.X)
 
     manter_no_topo_var = tk.BooleanVar(value=keep_on_top)
     modo_escuro_var = tk.BooleanVar(value=dark_mode)
@@ -534,22 +580,25 @@ def main():
         aplicar_tema(root, dark_mode)
         salvar_configuracoes()
 
-    tk.Checkbutton(
+    ttk.Checkbutton(
         frame_config_geral,
         text="Manter janela sempre no topo",
         variable=manter_no_topo_var,
         command=atualizar_manter_no_topo
     ).pack(anchor="w")
 
-    tk.Checkbutton(
+    ttk.Checkbutton(
         frame_config_geral,
         text="Modo escuro",
         variable=modo_escuro_var,
         command=atualizar_modo_escuro
     ).pack(anchor="w", pady=(6, 0))
 
+    ttk.Label(aba_logs, text="Logs", style="Title.TLabel").pack(anchor="w", padx=18, pady=(16, 2))
+    ttk.Label(aba_logs, text="Erros e eventos importantes aparecem aqui.", style="Muted.TLabel").pack(anchor="w", padx=18, pady=(0, 12))
+
     frame_logs = tk.Frame(aba_logs)
-    frame_logs.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+    frame_logs.pack(fill=tk.BOTH, expand=True, padx=18, pady=(0, 10))
 
     scrollbar_logs = tk.Scrollbar(frame_logs)
     scrollbar_logs.pack(side=tk.RIGHT, fill=tk.Y)
@@ -563,7 +612,7 @@ def main():
         log_text.delete("1.0", tk.END)
         log_text.config(state=tk.DISABLED)
 
-    tk.Button(aba_logs, text="Limpar Logs", command=limpar_logs, width=16).pack(pady=(0, 10))
+    ttk.Button(aba_logs, text="Limpar Logs", command=limpar_logs, width=16).pack(anchor="e", padx=18, pady=(0, 14))
 
     root.attributes("-topmost", keep_on_top)
     aplicar_tema(root, dark_mode)
