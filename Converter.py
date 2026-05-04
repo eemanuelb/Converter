@@ -11,6 +11,8 @@ from datetime import datetime
 import threading
 
 selected_files = []
+file_settings = {}
+codecs_visiveis = True
 output_format = "mp4"  # padrão
 codec_video = "libx264"
 codec_audio = "aac"
@@ -259,10 +261,39 @@ def alterar_pausa_processo(proc, pausar):
     return alterou
 
 
+
+def criar_configuracao_padrao():
+    return {
+        "format": output_format,
+        "video": codec_video,
+        "audio": codec_audio,
+    }
+
+
+def obter_configuracao_arquivo(caminho):
+    if caminho not in file_settings:
+        file_settings[caminho] = criar_configuracao_padrao()
+    return file_settings[caminho]
+
+
+def formatar_item_arquivo(caminho):
+    cfg = obter_configuracao_arquivo(caminho)
+    video = encontrar_rotulo_codec(video_codec_options, cfg.get("video"), cfg.get("video", ""))
+    audio_encoder = cfg.get("audio")
+    audio = "sem audio" if cfg.get("format") == "gif" else encontrar_rotulo_codec(audio_codec_options, audio_encoder, audio_encoder or "")
+    return f"{Path(caminho).name}  ->  .{cfg.get('format', output_format)} | {video} + {audio}"
+
+
+def atualizar_lista_arquivos():
+    listbox_arquivos.delete(0, tk.END)
+    for arquivo in selected_files:
+        listbox_arquivos.insert(tk.END, formatar_item_arquivo(arquivo))
+
 def remover_arquivo_convertido(caminho):
     try:
         idx_remover = selected_files.index(caminho)
         selected_files.pop(idx_remover)
+        file_settings.pop(caminho, None)
         listbox_arquivos.delete(idx_remover)
     except (ValueError, tk.TclError):
         pass
@@ -314,7 +345,7 @@ def get_ffmpeg_output_args(output_ext, video_encoder=None, audio_encoder=None):
 
 
 def converter_videos(arquivos):
-    global output_format, current_process, conversion_stop_requested, conversion_paused
+    global current_process, conversion_stop_requested, conversion_paused
     if not arquivos:
         executar_na_ui(messagebox.showwarning, "Aviso", "Nenhum arquivo selecionado.")
         registrar_log("Aviso: tentativa de conversao sem arquivos selecionados.")
@@ -323,9 +354,6 @@ def converter_videos(arquivos):
     configurar_botoes_conversao(False)
     
     total_arquivos = len(arquivos)
-    formato_saida = output_format
-    video_encoder = codec_video
-    audio_encoder = codec_audio
     registrar_log(f"Iniciando conversao de {total_arquivos} arquivo(s).")
     
     for idx, caminho in enumerate(arquivos):
@@ -334,9 +362,13 @@ def converter_videos(arquivos):
                 break
 
         vob = Path(caminho)
+        cfg_arquivo = obter_configuracao_arquivo(caminho)
+        formato_saida = cfg_arquivo.get("format", output_format)
+        video_encoder = cfg_arquivo.get("video", codec_video)
+        audio_encoder = cfg_arquivo.get("audio", codec_audio)
         saida = vob.with_suffix(f".{formato_saida}")
         
-        atualizar_status(f"Convertendo ({idx+1}/{total_arquivos}): {vob.name} (recodificando)")
+        atualizar_status(f"Convertendo ({idx+1}/{total_arquivos}): {vob.name} -> .{formato_saida}")
 
         comando = ["ffmpeg", "-y", "-i", str(vob)]
         codec_args = get_ffmpeg_output_args(
@@ -472,9 +504,10 @@ def selecionar_arquivos():
                 messagebox.showwarning("Formato não suportado", f"O arquivo {Path(arq).name} não é suportado.")
         
         selected_files = arquivos_validos
-        listbox_arquivos.delete(0, tk.END)
+        file_settings.clear()
         for arquivo in selected_files:
-            listbox_arquivos.insert(tk.END, Path(arquivo).name)
+            file_settings[arquivo] = criar_configuracao_padrao()
+        atualizar_lista_arquivos()
 
 
 def obter_preset_codec(formato=None):
@@ -529,6 +562,120 @@ def atualizar_codec_audio(codec):
     codec_audio = audio_codec_options[codec]
     salvar_configuracoes()
 
+
+
+def alternar_painel_codecs():
+    global codecs_visiveis
+    codecs_visiveis = not codecs_visiveis
+    if codecs_visiveis:
+        frame_codecs.pack(before=label_arquivos, fill=tk.X, padx=18, pady=(0, 10))
+        btn_toggle_codecs.config(text="Recolher codecs")
+    else:
+        frame_codecs.pack_forget()
+        btn_toggle_codecs.config(text="Mostrar codecs")
+
+
+def configurar_arquivo_selecionado():
+    selecionado = listbox_arquivos.curselection()
+    if not selecionado:
+        messagebox.showwarning("Aviso", "Selecione um arquivo para configurar.")
+        return
+    abrir_painel_config_arquivo(selected_files[selecionado[0]])
+
+
+def abrir_painel_config_arquivo(caminho):
+    cfg = dict(obter_configuracao_arquivo(caminho))
+    janela = tk.Toplevel(root)
+    janela.title(f"Configurar: {Path(caminho).name}")
+    janela.transient(root)
+    janela.grab_set()
+    janela.resizable(False, False)
+    janela.configure(bg=root.cget("bg"))
+
+    ttk.Label(janela, text=Path(caminho).name, style="Title.TLabel").pack(anchor="w", padx=16, pady=(14, 4))
+    label_recomendacao = ttk.Label(janela, text="", style="Muted.TLabel")
+    label_recomendacao.pack(anchor="w", padx=16, pady=(0, 10))
+
+    frame = ttk.LabelFrame(janela, text="Saida", padding=(12, 10))
+    frame.pack(fill=tk.X, padx=16, pady=(0, 12))
+
+    ttk.Label(frame, text="Formato", style="Card.TLabel").pack(anchor="w")
+
+    vars_painel = {}
+
+    def atualizar_recomendacao_local():
+        video_rec, audio_rec = obter_preset_codec(cfg["format"])
+        if audio_rec:
+            label_recomendacao.config(text=f"Recomendado para .{cfg['format']}: {video_rec} + {audio_rec}")
+            menu_audio_local.config(state=tk.NORMAL)
+        else:
+            label_recomendacao.config(text=f"Recomendado para .{cfg['format']}: {video_rec}, sem audio")
+            vars_painel["audio"].set("Sem audio")
+            menu_audio_local.config(state=tk.DISABLED)
+
+    def aplicar_preset_local(formato):
+        video_rec, audio_rec = obter_preset_codec(formato)
+        cfg["video"] = video_codec_options[video_rec]
+        vars_painel["video"].set(video_rec)
+        if audio_rec:
+            cfg["audio"] = audio_codec_options[audio_rec]
+            vars_painel["audio"].set(audio_rec)
+
+    def selecionar_formato_local(formato):
+        cfg["format"] = formato
+        aplicar_preset_local(formato)
+        atualizar_recomendacao_local()
+
+    menu_formato_local, vars_painel["format"] = criar_menu_selecao(frame, formatos_saida, cfg.get("format", output_format), selecionar_formato_local, width=12)
+    menu_formato_local.pack(anchor="w", pady=(2, 10))
+
+    frame_codecs_local = tk.Frame(frame)
+    frame_codecs_local.pack(fill=tk.X)
+
+    frame_video = tk.Frame(frame_codecs_local)
+    frame_video.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 8))
+    ttk.Label(frame_video, text="Video", style="Card.TLabel").pack(anchor="w")
+
+    def selecionar_video_local(codec):
+        cfg["video"] = video_codec_options[codec]
+
+    menu_video_local, vars_painel["video"] = criar_menu_selecao(
+        frame_video,
+        list(video_codec_options.keys()),
+        encontrar_rotulo_codec(video_codec_options, cfg.get("video"), "H.264"),
+        selecionar_video_local,
+        width=18,
+    )
+    menu_video_local.pack(fill=tk.X, pady=(2, 0))
+
+    frame_audio = tk.Frame(frame_codecs_local)
+    frame_audio.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(8, 0))
+    ttk.Label(frame_audio, text="Audio", style="Card.TLabel").pack(anchor="w")
+
+    def selecionar_audio_local(codec):
+        cfg["audio"] = audio_codec_options[codec]
+
+    menu_audio_local, vars_painel["audio"] = criar_menu_selecao(
+        frame_audio,
+        list(audio_codec_options.keys()),
+        encontrar_rotulo_codec(audio_codec_options, cfg.get("audio"), "AAC"),
+        selecionar_audio_local,
+        width=18,
+    )
+    menu_audio_local.pack(fill=tk.X, pady=(2, 0))
+
+    def salvar_arquivo():
+        file_settings[caminho] = cfg
+        atualizar_lista_arquivos()
+        janela.destroy()
+
+    frame_acoes = tk.Frame(janela)
+    frame_acoes.pack(fill=tk.X, padx=16, pady=(0, 14))
+    ttk.Button(frame_acoes, text="Aplicar", command=salvar_arquivo, style="Success.TButton").pack(side=tk.RIGHT, padx=(6, 0))
+    ttk.Button(frame_acoes, text="Cancelar", command=janela.destroy).pack(side=tk.RIGHT)
+
+    atualizar_recomendacao_local()
+    aplicar_tema(janela, dark_mode)
 
 def alternar_pausa():
     global conversion_paused
@@ -723,7 +870,7 @@ def criar_menu_selecao(parent, opcoes, valor_inicial, ao_selecionar, width=20):
 
 
 def main():
-    global btn_converter, btn_pausar, btn_parar, btn_selecionar, menu_video, menu_video_var, menu_audio, menu_audio_var, label_recomendacao_codec, listbox_arquivos, progress_bar, label_progresso, label_status, label_arquivos, root, log_text
+    global btn_converter, btn_pausar, btn_parar, btn_selecionar, btn_toggle_codecs, frame_codecs, menu_video, menu_video_var, menu_audio, menu_audio_var, label_recomendacao_codec, listbox_arquivos, progress_bar, label_progresso, label_status, label_arquivos, root, log_text
     
     root = tk.Tk()
     root.title("Conversor de Vídeo")
@@ -752,12 +899,18 @@ def main():
     btn_remover = ttk.Button(frame_botoes, text="Remover Selecionado", command=lambda: remover_arquivo())
     btn_remover.pack(side=tk.LEFT, padx=5)
 
+    btn_configurar_arquivo = ttk.Button(frame_botoes, text="Configurar Arquivo", command=configurar_arquivo_selecionado)
+    btn_configurar_arquivo.pack(side=tk.LEFT, padx=5)
+
     ttk.Label(aba_video, text="Formato de saída").pack(anchor="w", padx=24, pady=(2, 4))
 
     menu_formato, _ = criar_menu_selecao(aba_video, formatos_saida, output_format, atualizar_formato, width=10)
     menu_formato.pack(anchor="w", padx=24, pady=(0, 10))
 
-    frame_codecs = ttk.LabelFrame(aba_video, text="Codecs", padding=(12, 8))
+    btn_toggle_codecs = ttk.Button(aba_video, text="Recolher codecs", command=alternar_painel_codecs)
+    btn_toggle_codecs.pack(anchor="w", padx=24, pady=(0, 6))
+
+    frame_codecs = ttk.LabelFrame(aba_video, text="Codecs padrao para novos arquivos", padding=(12, 8))
     frame_codecs.pack(fill=tk.X, padx=18, pady=(0, 10))
 
     label_recomendacao_codec = ttk.Label(frame_codecs, text="", style="Card.TLabel")
@@ -805,6 +958,7 @@ def main():
 
     listbox_arquivos = tk.Listbox(frame_listbox, yscrollcommand=scrollbar.set, height=10)
     listbox_arquivos.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+    listbox_arquivos.bind("<Double-Button-1>", lambda _event: configurar_arquivo_selecionado())
     scrollbar.config(command=listbox_arquivos.yview)
 
     label_status = ttk.Label(aba_video, text="Pronto para converter", style="Muted.TLabel")
@@ -895,8 +1049,9 @@ def remover_arquivo():
     selecionado = listbox_arquivos.curselection()
     if selecionado:
         idx = selecionado[0]
-        listbox_arquivos.delete(idx)
-        selected_files.pop(idx)
+        caminho = selected_files.pop(idx)
+        file_settings.pop(caminho, None)
+        atualizar_lista_arquivos()
 
 
 if __name__ == "__main__":
