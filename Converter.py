@@ -406,6 +406,8 @@ def aplicar_tema(janela, modo_escuro):
     style.map("Accent.TButton", background=[("active", cores["accent_hover"]), ("disabled", cores["border"])])
     style.configure("Success.TButton", background=cores["success"], foreground="#ffffff", padding=(18, 9), font=("Segoe UI", 10, "bold"))
     style.map("Success.TButton", background=[("active", cores["success_hover"]), ("disabled", cores["border"])])
+    style.configure("TMenubutton", background=cores["field"], foreground=cores["fg"], bordercolor=cores["border"], padding=(10, 6), font=("Segoe UI", 9))
+    style.map("TMenubutton", background=[("active", cores["button_hover"])], foreground=[("active", cores["fg"])])
     style.configure("TCheckbutton", background=cores["bg"], foreground=cores["fg"], font=("Segoe UI", 9))
     style.configure("TRadiobutton", background=cores["bg"], foreground=cores["fg"], font=("Segoe UI", 9))
     style.map("TCheckbutton", background=[("active", cores["bg"])], foreground=[("active", cores["fg"])])
@@ -464,21 +466,21 @@ def aplicar_tema(janela, modo_escuro):
     aplicar_widget(janela)
 
 
-def configurar_combobox(combo):
-    def suspender_topmost(_event=None):
-        janela = combo.winfo_toplevel()
-        if keep_on_top:
-            janela.attributes("-topmost", False)
+def criar_menu_selecao(parent, opcoes, valor_inicial, ao_selecionar, width=20):
+    variavel = tk.StringVar(value=valor_inicial)
+    botao = ttk.Menubutton(parent, textvariable=variavel, width=width)
+    menu = tk.Menu(botao, tearoff=False)
 
-    def restaurar_topmost(_event=None):
-        janela = combo.winfo_toplevel()
-        if keep_on_top:
-            combo.after_idle(lambda: janela.attributes("-topmost", True))
+    def selecionar(opcao):
+        variavel.set(opcao)
+        ao_selecionar(opcao)
 
-    combo.bind("<ButtonPress-1>", suspender_topmost, add="+")
-    combo.bind("<<ComboboxSelected>>", restaurar_topmost, add="+")
-    combo.bind("<FocusOut>", restaurar_topmost, add="+")
-    combo.bind("<Escape>", restaurar_topmost, add="+")
+    for opcao in opcoes:
+        menu.add_command(label=opcao, command=lambda item=opcao: selecionar(item))
+
+    botao.configure(menu=menu)
+    botao.menu = menu
+    return botao, variavel
 
 
 def main():
@@ -513,11 +515,8 @@ def main():
 
     ttk.Label(aba_video, text="Formato de saída").pack(anchor="w", padx=24, pady=(2, 4))
 
-    combo_formato = ttk.Combobox(aba_video, values=formatos_saida, state="readonly", width=10)
-    combo_formato.set(output_format)
-    configurar_combobox(combo_formato)
-    combo_formato.pack(anchor="w", padx=24, pady=(0, 10))
-    combo_formato.bind("<<ComboboxSelected>>", lambda e: atualizar_formato(combo_formato.get()), add="+")
+    menu_formato, _ = criar_menu_selecao(aba_video, formatos_saida, output_format, atualizar_formato, width=10)
+    menu_formato.pack(anchor="w", padx=24, pady=(0, 10))
 
     # Modo de codecs
     frame_codecs = tk.Frame(aba_video)
@@ -537,19 +536,25 @@ def main():
 
     ttk.Label(frame_advanced, text="Vídeo:", style="Card.TLabel").pack(anchor="w")
     codecs_video = list(video_codec_options.keys())
-    combo_video = ttk.Combobox(frame_advanced, values=codecs_video, state="readonly", width=20)
-    combo_video.set(encontrar_rotulo_codec(video_codec_options, codec_video, "H.264"))
-    configurar_combobox(combo_video)
-    combo_video.pack(pady=(2, 8), fill=tk.X)
-    combo_video.bind("<<ComboboxSelected>>", lambda e: atualizar_codec_video(combo_video.get()), add="+")
+    menu_video, _ = criar_menu_selecao(
+        frame_advanced,
+        codecs_video,
+        encontrar_rotulo_codec(video_codec_options, codec_video, "H.264"),
+        atualizar_codec_video,
+        width=20,
+    )
+    menu_video.pack(pady=(2, 8), fill=tk.X)
 
     ttk.Label(frame_advanced, text="Áudio:", style="Card.TLabel").pack(anchor="w")
     codecs_audio = list(audio_codec_options.keys())
-    combo_audio = ttk.Combobox(frame_advanced, values=codecs_audio, state="readonly", width=20)
-    combo_audio.set(encontrar_rotulo_codec(audio_codec_options, codec_audio, "AAC"))
-    configurar_combobox(combo_audio)
-    combo_audio.pack(pady=(2, 0), fill=tk.X)
-    combo_audio.bind("<<ComboboxSelected>>", lambda e: atualizar_codec_audio(combo_audio.get()), add="+")
+    menu_audio, _ = criar_menu_selecao(
+        frame_advanced,
+        codecs_audio,
+        encontrar_rotulo_codec(audio_codec_options, codec_audio, "AAC"),
+        atualizar_codec_audio,
+        width=20,
+    )
+    menu_audio.pack(pady=(2, 0), fill=tk.X)
 
     label_arquivos = ttk.Label(aba_video, text="Arquivos selecionados")
     label_arquivos.pack(anchor="w", padx=24, pady=(4, 4))
