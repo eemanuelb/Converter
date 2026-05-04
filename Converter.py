@@ -5,6 +5,8 @@ from tkinter import filedialog, messagebox, ttk
 import re
 import json
 import os
+import ctypes
+from ctypes import wintypes
 from datetime import datetime
 import threading
 
@@ -15,6 +17,11 @@ codec_video = "libx264"
 codec_audio = "aac"
 dark_mode = False
 keep_on_top = False
+current_process = None
+conversion_stop_requested = False
+conversion_paused = False
+conversion_lock = threading.Lock()
+selection_menus = []
 settings_path = Path(os.getenv("APPDATA", Path.home())) / "Conversor" / "settings.json"
 
 video_codec_options = {
@@ -159,6 +166,80 @@ def configurar_botoes_conversao(ativo):
     estado = tk.NORMAL if ativo else tk.DISABLED
     executar_na_ui(btn_converter.config, state=estado)
     executar_na_ui(btn_selecionar.config, state=estado)
+    executar_na_ui(btn_pausar.config, state=tk.DISABLED if ativo else tk.NORMAL, text="Pausar")
+    executar_na_ui(btn_parar.config, state=tk.DISABLED if ativo else tk.NORMAL)
+
+
+class THREADENTRY32(ctypes.Structure):
+    _fields_ = [
+        ("dwSize", wintypes.DWORD),
+        ("cntUsage", wintypes.DWORD),
+        ("th32ThreadID", wintypes.DWORD),
+        ("th32OwnerProcessID", wintypes.DWORD),
+        ("tpBasePri", wintypes.LONG),
+        ("tpDeltaPri", wintypes.LONG),
+        ("dwFlags", wintypes.DWORD),
+    ]
+
+
+def iterar_threads_processo(pid):
+    if os.name != "nt":
+        return
+
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.CreateToolhelp32Snapshot.argtypes = [wintypes.DWORD, wintypes.DWORD]
+    kernel32.CreateToolhelp32Snapshot.restype = wintypes.HANDLE
+    kernel32.Thread32First.argtypes = [wintypes.HANDLE, ctypes.POINTER(THREADENTRY32)]
+    kernel32.Thread32First.restype = wintypes.BOOL
+    kernel32.Thread32Next.argtypes = [wintypes.HANDLE, ctypes.POINTER(THREADENTRY32)]
+    kernel32.Thread32Next.restype = wintypes.BOOL
+    kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+    kernel32.CloseHandle.restype = wintypes.BOOL
+    snapshot = kernel32.CreateToolhelp32Snapshot(0x00000004, 0)
+    if snapshot == wintypes.HANDLE(-1).value:
+        return
+
+    entrada = THREADENTRY32()
+    entrada.dwSize = ctypes.sizeof(THREADENTRY32)
+    try:
+        tem_thread = kernel32.Thread32First(snapshot, ctypes.byref(entrada))
+        while tem_thread:
+            if entrada.th32OwnerProcessID == pid:
+                yield entrada.th32ThreadID
+            tem_thread = kernel32.Thread32Next(snapshot, ctypes.byref(entrada))
+    finally:
+        kernel32.CloseHandle(snapshot)
+
+
+def alterar_pausa_processo(proc, pausar):
+    if proc is None or proc.poll() is not None or os.name != "nt":
+        return False
+
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.OpenThread.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+    kernel32.OpenThread.restype = wintypes.HANDLE
+    kernel32.SuspendThread.argtypes = [wintypes.HANDLE]
+    kernel32.SuspendThread.restype = wintypes.DWORD
+    kernel32.ResumeThread.argtypes = [wintypes.HANDLE]
+    kernel32.ResumeThread.restype = wintypes.DWORD
+    kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+    kernel32.CloseHandle.restype = wintypes.BOOL
+    alterou = False
+    for thread_id in iterar_threads_processo(proc.pid):
+        handle = kernel32.OpenThread(0x0002, False, thread_id)
+        if not handle:
+            continue
+
+        try:
+            if pausar:
+                alterou = kernel32.SuspendThread(handle) != 0xFFFFFFFF or alterou
+            else:
+                while kernel32.ResumeThread(handle) > 0:
+                    alterou = True
+        finally:
+            kernel32.CloseHandle(handle)
+
+    return alterou
 
 
 def remover_arquivo_convertido(caminho):
@@ -209,7 +290,7 @@ def get_ffmpeg_codec_args(output_ext, recode, mode=None, video_encoder=None, aud
 
 
 def converter_videos(arquivos):
-    global output_format
+    global output_format, current_process, conversion_stop_requested, conversion_paused
     if not arquivos:
         executar_na_ui(messagebox.showwarning, "Aviso", "Nenhum arquivo selecionado.")
         registrar_log("Aviso: tentativa de conversao sem arquivos selecionados.")
@@ -225,6 +306,10 @@ def converter_videos(arquivos):
     registrar_log(f"Iniciando conversao de {total_arquivos} arquivo(s).")
     
     for idx, caminho in enumerate(arquivos):
+        with conversion_lock:
+            if conversion_stop_requested:
+                break
+
         vob = Path(caminho)
         saida = vob.with_suffix(f".{formato_saida}")
         
@@ -251,6 +336,8 @@ def converter_videos(arquivos):
                 stderr=subprocess.PIPE,
                 universal_newlines=True
             )
+            with conversion_lock:
+                current_process = proc
         except FileNotFoundError:
             registrar_log("Erro: ffmpeg nao foi encontrado no PATH do sistema.")
             atualizar_status("Erro: ffmpeg não encontrado")
@@ -262,6 +349,10 @@ def converter_videos(arquivos):
         linhas_erro = []
         
         for linha in proc.stderr:
+            with conversion_lock:
+                if conversion_stop_requested:
+                    break
+
             linhas_erro.append(linha.rstrip())
             if "Duration:" in linha:
                 duracao_str = linha.split("Duration:")[1].split(",")[0].strip()
@@ -278,7 +369,28 @@ def converter_videos(arquivos):
                 
                 atualizar_progresso(porcentagem)
         
+        with conversion_lock:
+            parada_solicitada = conversion_stop_requested
+
+        if parada_solicitada and proc.poll() is None:
+            proc.terminate()
+
         proc.wait()
+
+        with conversion_lock:
+            if current_process is proc:
+                current_process = None
+            conversion_paused = False
+            parada_solicitada = conversion_stop_requested
+
+        if parada_solicitada:
+            conversion_stop_requested = False
+            atualizar_status("Conversao interrompida")
+            atualizar_progresso(0)
+            registrar_log(f"Conversao interrompida durante: {vob.name}")
+            configurar_botoes_conversao(True)
+            return
+
         if proc.returncode != 0:
             atualizar_status(f"Erro ao converter: {vob.name}")
             registrar_log(f"Erro ao converter {vob.name}. Codigo de saida: {proc.returncode}")
@@ -295,6 +407,19 @@ def converter_videos(arquivos):
         
         executar_na_ui(remover_arquivo_convertido, caminho)
     
+    with conversion_lock:
+        parada_solicitada = conversion_stop_requested
+        conversion_stop_requested = False
+        current_process = None
+        conversion_paused = False
+
+    if parada_solicitada:
+        atualizar_status("Conversao interrompida")
+        atualizar_progresso(0)
+        registrar_log("Conversao interrompida pelo usuario.")
+        configurar_botoes_conversao(True)
+        return
+
     executar_na_ui(messagebox.showinfo, "Pronto", "Conversão concluída!")
     registrar_log("Conversao finalizada com sucesso.")
     configurar_botoes_conversao(True)
@@ -360,9 +485,57 @@ def toggle_advanced():
     else:
         frame_advanced.pack_forget()
 
+
+def alternar_pausa():
+    global conversion_paused
+    with conversion_lock:
+        proc = current_process
+        pausar = not conversion_paused
+
+    if proc is None or proc.poll() is not None:
+        return
+
+    if not alterar_pausa_processo(proc, pausar):
+        registrar_log("Nao foi possivel alterar a pausa do processo atual.")
+        return
+
+    with conversion_lock:
+        conversion_paused = pausar
+
+    if pausar:
+        executar_na_ui(btn_pausar.config, text="Continuar")
+        atualizar_status("Conversao pausada")
+        registrar_log("Conversao pausada.")
+    else:
+        executar_na_ui(btn_pausar.config, text="Pausar")
+        atualizar_status("Conversao retomada")
+        registrar_log("Conversao retomada.")
+
+
+def parar_conversao():
+    global conversion_stop_requested, conversion_paused
+    with conversion_lock:
+        conversion_stop_requested = True
+        conversion_paused = False
+        proc = current_process
+
+    executar_na_ui(btn_parar.config, state=tk.DISABLED)
+    executar_na_ui(btn_pausar.config, state=tk.DISABLED, text="Pausar")
+    atualizar_status("Parando conversao...")
+    registrar_log("Parada solicitada pelo usuario.")
+
+    if proc is not None and proc.poll() is None:
+        alterar_pausa_processo(proc, False)
+        proc.terminate()
+
+
 def iniciar_conversao():
+    global conversion_stop_requested, conversion_paused
     if selected_files:
         arquivos = list(selected_files)
+        with conversion_lock:
+            conversion_stop_requested = False
+            conversion_paused = False
         configurar_botoes_conversao(False)
         threading.Thread(target=converter_videos, args=(arquivos,), daemon=True).start()
     else:
@@ -383,6 +556,10 @@ def aplicar_tema(janela, modo_escuro):
         "accent_hover": "#2563eb",
         "success": "#22a55f",
         "success_hover": "#16834b",
+        "warning": "#d97706",
+        "warning_hover": "#b45309",
+        "danger": "#dc2626",
+        "danger_hover": "#b91c1c",
     }
 
     style = ttk.Style(janela)
@@ -406,6 +583,10 @@ def aplicar_tema(janela, modo_escuro):
     style.map("Accent.TButton", background=[("active", cores["accent_hover"]), ("disabled", cores["border"])])
     style.configure("Success.TButton", background=cores["success"], foreground="#ffffff", padding=(18, 9), font=("Segoe UI", 10, "bold"))
     style.map("Success.TButton", background=[("active", cores["success_hover"]), ("disabled", cores["border"])])
+    style.configure("Warning.TButton", background=cores["warning"], foreground="#ffffff", padding=(14, 9), font=("Segoe UI", 10, "bold"))
+    style.map("Warning.TButton", background=[("active", cores["warning_hover"]), ("disabled", cores["border"])])
+    style.configure("Danger.TButton", background=cores["danger"], foreground="#ffffff", padding=(14, 9), font=("Segoe UI", 10, "bold"))
+    style.map("Danger.TButton", background=[("active", cores["danger_hover"]), ("disabled", cores["border"])])
     style.configure("TMenubutton", background=cores["field"], foreground=cores["fg"], bordercolor=cores["border"], padding=(10, 6), font=("Segoe UI", 9))
     style.map("TMenubutton", background=[("active", cores["button_hover"])], foreground=[("active", cores["fg"])])
     style.configure("TCheckbutton", background=cores["bg"], foreground=cores["fg"], font=("Segoe UI", 9))
@@ -464,6 +645,19 @@ def aplicar_tema(janela, modo_escuro):
 
     janela.configure(bg=cores["bg"])
     aplicar_widget(janela)
+    for menu in selection_menus:
+        try:
+            menu.configure(
+                background=cores["field"],
+                foreground=cores["fg"],
+                activebackground=cores["select"],
+                activeforeground=cores["fg"],
+                selectcolor=cores["field"],
+                borderwidth=0,
+                relief=tk.FLAT,
+            )
+        except tk.TclError:
+            pass
 
 
 def criar_menu_selecao(parent, opcoes, valor_inicial, ao_selecionar, width=20):
@@ -480,11 +674,12 @@ def criar_menu_selecao(parent, opcoes, valor_inicial, ao_selecionar, width=20):
 
     botao.configure(menu=menu)
     botao.menu = menu
+    selection_menus.append(menu)
     return botao, variavel
 
 
 def main():
-    global btn_converter, btn_selecionar, listbox_arquivos, progress_bar, label_progresso, label_status, label_arquivos, root, log_text
+    global btn_converter, btn_pausar, btn_parar, btn_selecionar, listbox_arquivos, progress_bar, label_progresso, label_status, label_arquivos, root, log_text
     
     root = tk.Tk()
     root.title("Conversor de Vídeo")
@@ -581,8 +776,17 @@ def main():
     label_progresso = ttk.Label(aba_video, text="0%", style="Muted.TLabel")
     label_progresso.pack(anchor="e", padx=24, pady=(0, 8))
 
-    btn_converter = ttk.Button(aba_video, text="Converter", width=20, command=iniciar_conversao, style="Success.TButton")
-    btn_converter.pack(pady=(0, 18))
+    frame_acoes = tk.Frame(aba_video)
+    frame_acoes.pack(pady=(0, 18))
+
+    btn_converter = ttk.Button(frame_acoes, text="Converter", width=16, command=iniciar_conversao, style="Success.TButton")
+    btn_converter.pack(side=tk.LEFT, padx=5)
+
+    btn_pausar = ttk.Button(frame_acoes, text="Pausar", width=12, command=alternar_pausa, style="Warning.TButton", state=tk.DISABLED)
+    btn_pausar.pack(side=tk.LEFT, padx=5)
+
+    btn_parar = ttk.Button(frame_acoes, text="Parar", width=12, command=parar_conversao, style="Danger.TButton", state=tk.DISABLED)
+    btn_parar.pack(side=tk.LEFT, padx=5)
 
     ttk.Label(aba_configuracoes, text="Configurações", style="Title.TLabel").pack(anchor="w", padx=18, pady=(16, 2))
     ttk.Label(aba_configuracoes, text="Preferências salvas automaticamente.", style="Muted.TLabel").pack(anchor="w", padx=18, pady=(0, 12))
