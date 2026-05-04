@@ -273,6 +273,9 @@ def get_ffmpeg_output_args(output_ext, mode=None, video_encoder=None, audio_enco
     video_encoder = video_encoder or codec_video
     audio_encoder = audio_encoder or codec_audio
 
+    if mode == "avancado":
+        return ["-c:v", video_encoder, "-c:a", audio_encoder]
+
     if output_ext == "gif":
         return [
             "-map", "0:v:0",
@@ -332,7 +335,6 @@ def get_ffmpeg_output_args(output_ext, mode=None, video_encoder=None, audio_enco
         if output_ext == "3gp":
             return ["-c:v", "libx264", "-c:a", "aac"]
         return ["-c:v", "libx264", "-c:a", "aac"]
-    
     return ["-c:v", video_encoder, "-c:a", audio_encoder]
 
 
