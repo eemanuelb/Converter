@@ -72,7 +72,7 @@ formatos_saida = [
     'ts', 'vob', 'webm', 'wmv'
 ]
 
-formatos_com_preset_obrigatorio = {"gif", "mxf", "ogv", "vob"}
+formatos_com_recodificacao_obrigatoria = {"gif", "mpeg", "mxf", "ogv", "vob", "webm"}
 
 
 def encontrar_rotulo_codec(opcoes, encoder, padrao):
@@ -99,6 +99,9 @@ def carregar_configuracoes():
     modo = dados.get("codec_mode")
     if modo in {"copy", "padrao", "avancado"}:
         codec_mode = modo
+
+    if output_format in formatos_com_recodificacao_obrigatoria and codec_mode == "copy":
+        codec_mode = "padrao"
 
     video = dados.get("codec_video")
     if video in video_codec_options.values():
@@ -308,6 +311,9 @@ def get_ffmpeg_output_args(output_ext, mode=None, video_encoder=None, audio_enco
             "-f", "mxf",
         ]
 
+    if mode == "copy" and output_ext in formatos_com_recodificacao_obrigatoria:
+        mode = "padrao"
+
     if mode == "copy":
         return ["-c", "copy"]
     
@@ -354,8 +360,8 @@ def converter_videos(arquivos):
         vob = Path(caminho)
         saida = vob.with_suffix(f".{formato_saida}")
         
-        usa_preset_obrigatorio = formato_saida.lower() in formatos_com_preset_obrigatorio
-        modo = "recodificando" if modo_codec != "copy" or usa_preset_obrigatorio else "copiando"
+        exige_recodificacao = formato_saida.lower() in formatos_com_recodificacao_obrigatoria
+        modo = "recodificando" if modo_codec != "copy" or exige_recodificacao else "copiando"
         atualizar_status(f"Convertendo ({idx+1}/{total_arquivos}): {vob.name} ({modo})")
 
         comando = ["ffmpeg", "-y", "-i", str(vob)]
@@ -498,9 +504,28 @@ def selecionar_arquivos():
             listbox_arquivos.insert(tk.END, Path(arquivo).name)
 
 
+def formato_exige_recodificacao(formato=None):
+    return (formato or output_format).lower().lstrip(".") in formatos_com_recodificacao_obrigatoria
+
+
+def atualizar_estado_codec_original():
+    if "radio_codec_original" not in globals():
+        return
+
+    if formato_exige_recodificacao():
+        executar_na_ui(radio_codec_original.config, state=tk.DISABLED)
+        if codec_mode == "copy":
+            atualizar_codec_mode("padrao")
+    else:
+        executar_na_ui(radio_codec_original.config, state=tk.NORMAL)
+
+
 def atualizar_formato(formato):
     global output_format
     output_format = formato
+    if formato_exige_recodificacao() and codec_mode == "copy":
+        atualizar_codec_mode("padrao")
+    atualizar_estado_codec_original()
     salvar_configuracoes()
 
 def atualizar_codec_video(codec):
@@ -720,7 +745,7 @@ def criar_menu_selecao(parent, opcoes, valor_inicial, ao_selecionar, width=20):
 
 
 def main():
-    global btn_converter, btn_pausar, btn_parar, btn_selecionar, listbox_arquivos, progress_bar, label_progresso, label_status, label_arquivos, root, log_text
+    global btn_converter, btn_pausar, btn_parar, btn_selecionar, radio_codec_original, listbox_arquivos, progress_bar, label_progresso, label_status, label_arquivos, root, log_text
     
     root = tk.Tk()
     root.title("Conversor de Vídeo")
@@ -761,7 +786,8 @@ def main():
     global codec_mode_var
     codec_mode_var = tk.StringVar(value=codec_mode)
 
-    ttk.Radiobutton(frame_codecs, text="Codec Original", variable=codec_mode_var, value="copy", command=lambda: atualizar_codec_mode("copy")).pack(side=tk.LEFT, padx=8)
+    radio_codec_original = ttk.Radiobutton(frame_codecs, text="Codec Original", variable=codec_mode_var, value="copy", command=lambda: atualizar_codec_mode("copy"))
+    radio_codec_original.pack(side=tk.LEFT, padx=8)
     ttk.Radiobutton(frame_codecs, text="Codec Padrão", variable=codec_mode_var, value="padrao", command=lambda: atualizar_codec_mode("padrao")).pack(side=tk.LEFT, padx=8)
     ttk.Radiobutton(frame_codecs, text="Codec Avançado", variable=codec_mode_var, value="avancado", command=lambda: atualizar_codec_mode("avancado")).pack(side=tk.LEFT, padx=8)
 
@@ -796,6 +822,7 @@ def main():
     label_arquivos.pack(anchor="w", padx=24, pady=(4, 4))
 
     # Garantir estado inicial
+    atualizar_estado_codec_original()
     toggle_advanced()
 
     frame_listbox = tk.Frame(aba_video)
