@@ -735,22 +735,22 @@ def iniciar_conversao():
 
 def aplicar_tema(janela, modo_escuro):
     cores = {
-        "bg": "#15171a" if modo_escuro else "#f4f6f8",
-        "fg": "#f4f7fb" if modo_escuro else "#1f2933",
-        "muted": "#aeb7c2" if modo_escuro else "#5f6b7a",
-        "field": "#20242a" if modo_escuro else "#ffffff",
-        "button": "#2a3038" if modo_escuro else "#e8edf3",
-        "button_hover": "#363e49" if modo_escuro else "#dce4ee",
-        "border": "#333b46" if modo_escuro else "#d7dee8",
-        "select": "#345174" if modo_escuro else "#cfe3ff",
-        "accent": "#3b82f6",
-        "accent_hover": "#2563eb",
-        "success": "#22a55f",
-        "success_hover": "#16834b",
-        "warning": "#d97706",
-        "warning_hover": "#b45309",
-        "danger": "#dc2626",
-        "danger_hover": "#b91c1c",
+        "bg": "#0f172a" if modo_escuro else "#f8fafc",
+        "fg": "#f1f5f9" if modo_escuro else "#0f172a",
+        "muted": "#94a3b8" if modo_escuro else "#64748b",
+        "field": "#1e293b" if modo_escuro else "#ffffff",
+        "button": "#334155" if modo_escuro else "#e2e8f0",
+        "button_hover": "#475569" if modo_escuro else "#cbd5e1",
+        "border": "#334155" if modo_escuro else "#e2e8f0",
+        "select": "#2563eb" if modo_escuro else "#bfdbfe",
+        "accent": "#3b82f6",          # Blue 500
+        "accent_hover": "#2563eb",    # Blue 600
+        "success": "#10b981",         # Emerald 500
+        "success_hover": "#059669",   # Emerald 600
+        "warning": "#f59e0b",         # Amber 500
+        "warning_hover": "#d97706",   # Amber 600
+        "danger": "#ef4444",          # Red 500
+        "danger_hover": "#dc2626",    # Red 600
     }
 
     style = ttk.Style(janela)
@@ -768,7 +768,7 @@ def aplicar_tema(janela, modo_escuro):
         background=[("selected", cores["field"]), ("active", cores["button_hover"])],
         foreground=[("selected", cores["fg"])],
     )
-    style.configure("TButton", background=cores["button"], foreground=cores["fg"], borderwidth=0, padding=(12, 7), font=("Segoe UI", 9))
+    style.configure("TButton", background=cores["button"], foreground=cores["fg"], borderwidth=0, padding=(16, 8), font=("Segoe UI", 9, "bold"))
     style.map("TButton", background=[("active", cores["button_hover"]), ("disabled", cores["border"])])
     style.configure("Accent.TButton", background=cores["accent"], foreground="#ffffff")
     style.map("Accent.TButton", background=[("active", cores["accent_hover"]), ("disabled", cores["border"])])
@@ -778,7 +778,7 @@ def aplicar_tema(janela, modo_escuro):
     style.map("Warning.TButton", background=[("active", cores["warning_hover"]), ("disabled", cores["border"])])
     style.configure("Danger.TButton", background=cores["danger"], foreground="#ffffff", padding=(14, 9), font=("Segoe UI", 10, "bold"))
     style.map("Danger.TButton", background=[("active", cores["danger_hover"]), ("disabled", cores["border"])])
-    style.configure("TMenubutton", background=cores["field"], foreground=cores["fg"], bordercolor=cores["border"], padding=(10, 6), font=("Segoe UI", 9))
+    style.configure("TMenubutton", background=cores["field"], foreground=cores["fg"], bordercolor=cores["border"], padding=(12, 8), font=("Segoe UI", 9))
     style.map("TMenubutton", background=[("active", cores["button_hover"])], foreground=[("active", cores["fg"])])
     style.configure("TCheckbutton", background=cores["bg"], foreground=cores["fg"], font=("Segoe UI", 9))
     style.configure("TRadiobutton", background=cores["bg"], foreground=cores["fg"], font=("Segoe UI", 9))
@@ -794,7 +794,7 @@ def aplicar_tema(janela, modo_escuro):
         selectbackground=[("readonly", cores["select"])],
         selectforeground=[("readonly", cores["fg"])],
     )
-    style.configure("Horizontal.TProgressbar", background="#4CAF50", troughcolor=cores["field"])
+    style.configure("Horizontal.TProgressbar", background=cores["success"], troughcolor=cores["field"], borderwidth=0, thickness=10)
     janela.option_add("*TCombobox*Listbox.background", cores["field"])
     janela.option_add("*TCombobox*Listbox.foreground", cores["fg"])
     janela.option_add("*TCombobox*Listbox.selectBackground", cores["select"])
@@ -827,6 +827,7 @@ def aplicar_tema(janela, modo_escuro):
                 selectforeground=cores["fg"],
                 highlightthickness=1,
                 highlightbackground=cores["border"],
+                font=("Segoe UI", 10),
                 relief=tk.FLAT,
                 borderwidth=0,
             )
@@ -887,41 +888,52 @@ def main():
     notebook.add(aba_configuracoes, text="Configurações")
     notebook.add(aba_logs, text="Logs")
 
-    ttk.Label(aba_video, text="Conversão de vídeo", style="Title.TLabel").pack(anchor="w", padx=18, pady=(16, 2))
-    ttk.Label(aba_video, text="Selecione arquivos, escolha o formato e acompanhe o progresso.", style="Muted.TLabel").pack(anchor="w", padx=18, pady=(0, 12))
+    # --- ABA VÍDEO ---
+    header_frame = tk.Frame(aba_video)
+    header_frame.pack(fill=tk.X, padx=24, pady=(24, 16))
+    
+    ttk.Label(header_frame, text="Conversão de Vídeo", style="Title.TLabel").pack(anchor="w")
+    ttk.Label(header_frame, text="Selecione arquivos para converter em massa.", style="Muted.TLabel").pack(anchor="w")
 
-    frame_botoes = tk.Frame(aba_video)
-    frame_botoes.pack(fill=tk.X, padx=18, pady=(0, 10))
+    # Card Superior: Ações e Formato
+    top_card = ttk.Frame(aba_video, style="Card.TFrame")
+    top_card.pack(fill=tk.X, padx=18, pady=(0, 12))
+    
+    frame_botoes = ttk.Frame(top_card, style="Card.TFrame") # Usar estilo do card
+    frame_botoes.pack(fill=tk.X, padx=12, pady=12)
 
-    btn_selecionar = ttk.Button(frame_botoes, text="Selecionar Arquivos", command=selecionar_arquivos, width=20, style="Accent.TButton")
-    btn_selecionar.pack(side=tk.LEFT, padx=5)
+    btn_selecionar = ttk.Button(frame_botoes, text="Adicionar Arquivos", command=selecionar_arquivos, style="Accent.TButton")
+    btn_selecionar.pack(side=tk.LEFT, padx=(0, 8))
 
-    btn_remover = ttk.Button(frame_botoes, text="Remover Selecionado", command=lambda: remover_arquivo())
-    btn_remover.pack(side=tk.LEFT, padx=5)
+    btn_remover = ttk.Button(frame_botoes, text="Remover", command=lambda: remover_arquivo())
+    btn_remover.pack(side=tk.LEFT, padx=8)
 
-    btn_configurar_arquivo = ttk.Button(frame_botoes, text="Configurar Arquivo", command=configurar_arquivo_selecionado)
-    btn_configurar_arquivo.pack(side=tk.LEFT, padx=5)
+    btn_configurar_arquivo = ttk.Button(frame_botoes, text="Ajustar Individual", command=configurar_arquivo_selecionado)
+    btn_configurar_arquivo.pack(side=tk.LEFT, padx=8)
+    
+    # Separador visual
+    tk.Frame(frame_botoes, width=2, bg="#cbd5e1").pack(side=tk.LEFT, fill=tk.Y, padx=12)
 
-    ttk.Label(aba_video, text="Formato de saída").pack(anchor="w", padx=24, pady=(2, 4))
+    ttk.Label(frame_botoes, text="Saída Global:", font=("Segoe UI", 9, "bold")).pack(side=tk.LEFT, padx=(4, 8))
+    menu_formato, _ = criar_menu_selecao(frame_botoes, formatos_saida, output_format, atualizar_formato, width=8)
+    menu_formato.pack(side=tk.LEFT)
 
-    menu_formato, _ = criar_menu_selecao(aba_video, formatos_saida, output_format, atualizar_formato, width=10)
-    menu_formato.pack(anchor="w", padx=24, pady=(0, 10))
+    # Card de Codecs
+    btn_toggle_codecs = ttk.Button(aba_video, text="Recolher codecs", command=alternar_painel_codecs, style="TButton")
+    btn_toggle_codecs.pack(anchor="e", padx=24, pady=(0, 6))
 
-    btn_toggle_codecs = ttk.Button(aba_video, text="Recolher codecs", command=alternar_painel_codecs)
-    btn_toggle_codecs.pack(anchor="w", padx=24, pady=(0, 6))
-
-    frame_codecs = ttk.LabelFrame(aba_video, text="Codecs padrao para novos arquivos", padding=(12, 8))
+    frame_codecs = ttk.LabelFrame(aba_video, text=" Configurações de Codec (Padrão) ", padding=(16, 12))
     frame_codecs.pack(fill=tk.X, padx=18, pady=(0, 10))
 
-    label_recomendacao_codec = ttk.Label(frame_codecs, text="", style="Card.TLabel")
-    label_recomendacao_codec.pack(anchor="w", pady=(0, 8))
+    label_recomendacao_codec = ttk.Label(frame_codecs, text="", font=("Segoe UI", 9, "italic"))
+    label_recomendacao_codec.pack(anchor="w", pady=(0, 12))
 
-    frame_menus_codec = tk.Frame(frame_codecs)
+    frame_menus_codec = ttk.Frame(frame_codecs, style="Card.TFrame")
     frame_menus_codec.pack(fill=tk.X)
 
-    frame_codec_video = tk.Frame(frame_menus_codec)
+    frame_codec_video = ttk.Frame(frame_menus_codec, style="Card.TFrame")
     frame_codec_video.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 8))
-    ttk.Label(frame_codec_video, text="Video:", style="Card.TLabel").pack(anchor="w")
+    ttk.Label(frame_codec_video, text="Vídeo:", style="Card.TLabel").pack(anchor="w")
     codecs_video = list(video_codec_options.keys())
     menu_video, menu_video_var = criar_menu_selecao(
         frame_codec_video,
@@ -932,9 +944,9 @@ def main():
     )
     menu_video.pack(pady=(2, 0), fill=tk.X)
 
-    frame_codec_audio = tk.Frame(frame_menus_codec)
+    frame_codec_audio = ttk.Frame(frame_menus_codec, style="Card.TFrame")
     frame_codec_audio.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(8, 0))
-    ttk.Label(frame_codec_audio, text="Audio:", style="Card.TLabel").pack(anchor="w")
+    ttk.Label(frame_codec_audio, text="Áudio:", style="Card.TLabel").pack(anchor="w")
     codecs_audio = list(audio_codec_options.keys())
     menu_audio, menu_audio_var = criar_menu_selecao(
         frame_codec_audio,
@@ -945,42 +957,46 @@ def main():
     )
     menu_audio.pack(pady=(2, 0), fill=tk.X)
 
-    label_arquivos = ttk.Label(aba_video, text="Arquivos selecionados")
-    label_arquivos.pack(anchor="w", padx=24, pady=(4, 4))
-
-    atualizar_recomendacao_codec()
-
+    # Listagem de Arquivos
+    label_arquivos = ttk.Label(aba_video, text="Fila de Conversão", font=("Segoe UI", 10, "bold"))
+    label_arquivos.pack(anchor="w", padx=24, pady=(10, 5))
+    
     frame_listbox = tk.Frame(aba_video)
     frame_listbox.pack(padx=18, pady=(0, 10), fill=tk.BOTH, expand=True)
-
     scrollbar = tk.Scrollbar(frame_listbox)
     scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-
-    listbox_arquivos = tk.Listbox(frame_listbox, yscrollcommand=scrollbar.set, height=10)
+    listbox_arquivos = tk.Listbox(frame_listbox, yscrollcommand=scrollbar.set, height=8)
     listbox_arquivos.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
     listbox_arquivos.bind("<Double-Button-1>", lambda _event: configurar_arquivo_selecionado())
     scrollbar.config(command=listbox_arquivos.yview)
+    
+    # Footer: Status e Progresso
+    footer_frame = tk.Frame(aba_video)
+    footer_frame.pack(fill=tk.X, padx=24, pady=(10, 24))
 
-    label_status = ttk.Label(aba_video, text="Pronto para converter", style="Muted.TLabel")
-    label_status.pack(anchor="w", padx=24, pady=(0, 4))
+    status_line = tk.Frame(footer_frame)
+    status_line.pack(fill=tk.X)
+    label_status = ttk.Label(status_line, text="Aguardando início", style="Muted.TLabel")
+    label_status.pack(side=tk.LEFT)
+    label_progresso = ttk.Label(status_line, text="0%", font=("Segoe UI", 9, "bold"))
+    label_progresso.pack(side=tk.RIGHT)
 
-    progress_bar = ttk.Progressbar(aba_video, orient=tk.HORIZONTAL, length=400, mode='determinate')
-    progress_bar.pack(pady=(0, 2), padx=18, fill=tk.X)
+    progress_bar = ttk.Progressbar(footer_frame, orient=tk.HORIZONTAL, mode='determinate', style="Horizontal.TProgressbar")
+    progress_bar.pack(fill=tk.X, pady=(5, 15))
 
-    label_progresso = ttk.Label(aba_video, text="0%", style="Muted.TLabel")
-    label_progresso.pack(anchor="e", padx=24, pady=(0, 8))
+    frame_acoes = tk.Frame(footer_frame)
+    frame_acoes.pack(anchor="center")
 
-    frame_acoes = tk.Frame(aba_video)
-    frame_acoes.pack(pady=(0, 18))
-
-    btn_converter = ttk.Button(frame_acoes, text="Converter", width=16, command=iniciar_conversao, style="Success.TButton")
-    btn_converter.pack(side=tk.LEFT, padx=5)
+    btn_converter = ttk.Button(frame_acoes, text="INICIAR CONVERSÃO", width=25, command=iniciar_conversao, style="Success.TButton")
+    btn_converter.pack(side=tk.LEFT, padx=10)
 
     btn_pausar = ttk.Button(frame_acoes, text="Pausar", width=12, command=alternar_pausa, style="Warning.TButton", state=tk.DISABLED)
-    btn_pausar.pack(side=tk.LEFT, padx=5)
+    btn_pausar.pack(side=tk.LEFT, padx=10)
 
     btn_parar = ttk.Button(frame_acoes, text="Parar", width=12, command=parar_conversao, style="Danger.TButton", state=tk.DISABLED)
-    btn_parar.pack(side=tk.LEFT, padx=5)
+    btn_parar.pack(side=tk.LEFT, padx=10)
+
+    atualizar_recomendacao_codec()
 
     ttk.Label(aba_configuracoes, text="Configurações", style="Title.TLabel").pack(anchor="w", padx=18, pady=(16, 2))
     ttk.Label(aba_configuracoes, text="Preferências salvas automaticamente.", style="Muted.TLabel").pack(anchor="w", padx=18, pady=(0, 12))
